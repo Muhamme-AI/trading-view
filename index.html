@@ -232,7 +232,7 @@ function tradeTypeBadge(type) {
 
 function withType(path, type) {
   if (!type || type === 'all') return path;
-  return path + (path.includes('?') ? '&' : '?') + 'type=' + type;
+  return path + (path.includes('?') ? '&' : '?') + 'trade_type=' + type;
 }
 
 function analyticsPath(type) {

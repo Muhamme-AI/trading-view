@@ -202,12 +202,12 @@ class TestRequest(BaseModel):
 
 # ── ROUTES: TRADES ────────────────────────────────────────
 @app.get("/api/trades")
-def get_trades(type: Optional[str] = Query(None)):
+def get_trades(trade_type: Optional[str] = Query(None)):
     conn = get_db()
     rows = conn.execute("SELECT * FROM trades ORDER BY date DESC, id DESC").fetchall()
     conn.close()
     trades = [dict(r) for r in rows]
-    return filter_trades_by_type(trades, type)
+    return filter_trades_by_type(trades, trade_type)
 
 @app.post("/api/trades")
 def create_trade(trade: Trade):
@@ -617,11 +617,11 @@ def score_news(req: ScoreRequest):
 
 # ── ROUTES: ANALYTICS ─────────────────────────────────────
 @app.get("/api/analytics")
-def get_analytics(type: Optional[str] = Query(None)):
+def get_analytics(trade_type: Optional[str] = Query(None)):
     conn = get_db()
     trades = [dict(r) for r in conn.execute("SELECT * FROM trades").fetchall()]
     conn.close()
-    trades = filter_trades_by_type(trades, type)
+    trades = filter_trades_by_type(trades, trade_type)
     wins   = [t for t in trades if t["outcome"] == "Win"]
     losses = [t for t in trades if t["outcome"] == "Loss"]
     win_rate = round(len(wins) / len(trades) * 100) if trades else 0
@@ -645,11 +645,11 @@ def get_analytics(type: Optional[str] = Query(None)):
 MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 @app.get("/api/performance")
-def get_performance(type: Optional[str] = Query(None)):
+def get_performance(trade_type: Optional[str] = Query(None)):
     conn = get_db()
     rows = conn.execute("SELECT * FROM trades ORDER BY date DESC, id DESC").fetchall()
     conn.close()
-    trades = filter_trades_by_type([dict(r) for r in rows], type)
+    trades = filter_trades_by_type([dict(r) for r in rows], trade_type)
     chronological = list(reversed(trades))
 
     wins = [t for t in trades if t.get("outcome") == "Win"]
