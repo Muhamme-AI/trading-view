@@ -10,11 +10,19 @@ echo "======================================"
 cd "$(dirname "$0")"
 
 # Check if dependencies are installed
-if ! python -c "import fastapi" 2>/dev/null; then
+if ! python -c "import fastapi, psycopg" 2>/dev/null; then
   echo ""
   echo "  Installing dependencies..."
   pip install -r requirements.txt -q
   echo "  Done."
+fi
+
+# Require Supabase database URL
+if [ ! -f .env ] && [ -z "$DATABASE_URL" ]; then
+  echo ""
+  echo "  Missing .env — copy .env.example and set DATABASE_URL"
+  echo "  Supabase → Project Settings → Database → Connection string"
+  exit 1
 fi
 
 echo ""

@@ -9,7 +9,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-import sqlite3
 import httpx
 import json
 import os
@@ -18,9 +17,10 @@ import math
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
+from db import get_db, check_connection
 from scraper import (
     run_sync, get_analysis_summary, get_event_history,
-    get_last_sync, ensure_tables, get_journal_rows, save_journal_note,
+    get_last_sync, get_journal_rows, save_journal_note,
     get_news_event, scrape_upcoming, get_brief, NEWS_MAP,
 )
 
@@ -34,48 +34,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_PATH = Path(__file__).parent / "trading.db"
-
 # ── DATABASE ──────────────────────────────────────────────
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
 def init_db():
+    check_connection()
     conn = get_db()
     c = conn.cursor()
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS trades (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            news1 TEXT, news2 TEXT, news3 TEXT,
-            entry TEXT, ratio REAL, sl REAL,
-            previous TEXT, forecast TEXT, actual TEXT,
-            outcome TEXT, improvement TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS news_ratings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            type TEXT NOT NULL,
-            comment TEXT
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    """)
-
-    c.execute("SELECT COUNT(*) FROM news_ratings")
-    if c.fetchone()[0] == 0:
+    c.execute("SELECT COUNT(*) AS count FROM news_ratings")
+    if c.fetchone()["count"] == 0:
         seed_ratings = [
             ("Non Farm Payroll US",             "Good",      "Pair with Unemployment for strongest signal"),
             ("Unemployment US",                  "Good",      "Pair with Non Farm Payroll"),
@@ -105,10 +71,13 @@ def init_db():
             ("GDP US",                           "Unreliable",""),
             ("Unemployment UK",                  "Bad",       ""),
         ]
-        c.executemany("INSERT OR IGNORE INTO news_ratings (name, type, comment) VALUES (?, ?, ?)", seed_ratings)
+        c.executemany(
+            "INSERT INTO news_ratings (name, type, comment) VALUES (%s, %s, %s) ON CONFLICT (name) DO NOTHING",
+            seed_ratings,
+        )
 
-    c.execute("SELECT COUNT(*) FROM trades")
-    if c.fetchone()[0] == 0:
+    c.execute("SELECT COUNT(*) AS count FROM trades")
+    if c.fetchone()["count"] == 0:
         seed_trades = [
             ("2026-03-25","Fed Chair Powell Speech US","","","5 min after checking reaction",5,15,"","","","Loss","Didn't react as expected"),
             ("2025-02-01","Core Inflation MoM US","Inflation Rate YoY US","Fed Chair Powell Speech US","5 min after checking reaction",5,10,"","","","Win","Could have entered before 10 min and still won"),
@@ -127,23 +96,11 @@ def init_db():
         ]
         c.executemany("""
             INSERT INTO trades (date,news1,news2,news3,entry,ratio,sl,previous,forecast,actual,outcome,improvement)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, seed_trades)
 
     conn.commit()
-
-    try:
-        c.execute("ALTER TABLE news_events ADD COLUMN user_note TEXT")
-    except Exception:
-        pass
-    try:
-        c.execute("ALTER TABLE trades ADD COLUMN news_event_id INTEGER")
-    except Exception:
-        pass
-
-    conn.commit()
     conn.close()
-    ensure_tables()
 
 # ── MODELS ────────────────────────────────────────────────
 class Trade(BaseModel):
@@ -205,12 +162,13 @@ def create_trade(trade: Trade):
     c = conn.cursor()
     c.execute("""
         INSERT INTO trades (date,news1,news2,news3,entry,ratio,sl,previous,forecast,actual,outcome,improvement,news_event_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        RETURNING id
     """, (trade.date, trade.news1, trade.news2 or "", trade.news3 or "",
           trade.entry or "", trade.ratio, trade.sl,
           trade.previous or "", trade.forecast or "", trade.actual or "",
           trade.outcome, trade.improvement or "", trade.news_event_id))
-    trade_id = c.lastrowid
+    trade_id = c.fetchone()["id"]
     conn.commit()
     conn.close()
     return {"id": trade_id, "message": "Trade saved"}
@@ -218,7 +176,7 @@ def create_trade(trade: Trade):
 @app.delete("/api/trades/{trade_id}")
 def delete_trade(trade_id: int):
     conn = get_db()
-    conn.execute("DELETE FROM trades WHERE id = ?", (trade_id,))
+    conn.execute("DELETE FROM trades WHERE id = %s", (trade_id,))
     conn.commit()
     conn.close()
     return {"message": "Deleted"}
@@ -270,28 +228,28 @@ def _lookup_event_reaction(conn, where: str, params: tuple, order: str) -> dict 
 def get_trade_analysis(trade_id: int) -> dict:
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM trades WHERE id = ?", (trade_id,)).fetchone()
+        row = conn.execute("SELECT * FROM trades WHERE id = %s", (trade_id,)).fetchone()
         if not row:
             return {"error": "Trade not found"}
         trade = dict(row)
 
         reaction = None
         if trade.get("news_event_id"):
-            reaction = _lookup_event_reaction(conn, "ne.id = ?", (trade["news_event_id"],), "ne.id DESC")
+            reaction = _lookup_event_reaction(conn, "ne.id = %s", (trade["news_event_id"],), "ne.id DESC")
         if not reaction:
             reaction = _lookup_event_reaction(
-                conn, "ne.your_name = ? AND ne.event_date = ?",
+                conn, "ne.your_name = %s AND ne.event_date = %s",
                 (trade["news1"], trade["date"]), "ne.id DESC",
             )
         if not reaction:
             reaction = _lookup_event_reaction(
-                conn, "ne.your_name = ?",
+                conn, "ne.your_name = %s",
                 (trade["news1"],), "ne.event_date DESC",
             )
         if not reaction:
             for alt_name in get_related_event_names(trade["news1"])[1:]:
                 reaction = _lookup_event_reaction(
-                    conn, "ne.your_name = ? AND ne.event_date = ?",
+                    conn, "ne.your_name = %s AND ne.event_date = %s",
                     (alt_name, trade["date"]), "ne.id DESC",
                 )
                 if reaction:
@@ -299,7 +257,7 @@ def get_trade_analysis(trade_id: int) -> dict:
         if not reaction:
             for alt_name in get_related_event_names(trade["news1"])[1:]:
                 reaction = _lookup_event_reaction(
-                    conn, "ne.your_name = ?",
+                    conn, "ne.your_name = %s",
                     (alt_name,), "ne.event_date DESC",
                 )
                 if reaction:
@@ -416,7 +374,7 @@ def get_ratings():
 def upsert_rating(rating: NewsRating):
     conn = get_db()
     conn.execute("""
-        INSERT INTO news_ratings (name, type, comment) VALUES (?, ?, ?)
+        INSERT INTO news_ratings (name, type, comment) VALUES (%s, %s, %s)
         ON CONFLICT(name) DO UPDATE SET type=excluded.type, comment=excluded.comment
     """, (rating.name, rating.type, rating.comment or ""))
     conn.commit()
@@ -426,7 +384,7 @@ def upsert_rating(rating: NewsRating):
 @app.delete("/api/ratings/{name}")
 def delete_rating(name: str):
     conn = get_db()
-    conn.execute("DELETE FROM news_ratings WHERE name = ?", (name,))
+    conn.execute("DELETE FROM news_ratings WHERE name = %s", (name,))
     conn.commit()
     conn.close()
     return {"message": "Deleted"}
@@ -444,7 +402,7 @@ def get_settings():
 def save_settings(s: SettingsUpdate):
     conn = get_db()
     for key, val in [("token", s.token), ("account_id", s.account_id), ("env", s.env)]:
-        conn.execute("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, val))
+        conn.execute("INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, val))
     conn.commit()
     conn.close()
     return {"message": "Saved"}
@@ -834,8 +792,8 @@ def get_analysis():
         summary = get_analysis_summary()
         last = get_last_sync()
         conn = get_db()
-        total_events = conn.execute("SELECT COUNT(*) FROM news_events").fetchone()[0]
-        total_reactions = conn.execute("SELECT COUNT(*) FROM price_reactions").fetchone()[0]
+        total_events = conn.execute("SELECT COUNT(*) AS count FROM news_events").fetchone()["count"]
+        total_reactions = conn.execute("SELECT COUNT(*) AS count FROM price_reactions").fetchone()["count"]
         conn.close()
         return {
             "summary": summary,
@@ -872,7 +830,7 @@ def create_journal_trade(event_id: int, body: JournalTrade):
         raise HTTPException(status_code=404, detail="Event not found")
     conn = get_db()
     existing = conn.execute(
-        "SELECT id FROM trades WHERE news_event_id = ?", (event_id,)
+        "SELECT id FROM trades WHERE news_event_id = %s", (event_id,)
     ).fetchone()
     if existing:
         conn.close()
@@ -880,14 +838,15 @@ def create_journal_trade(event_id: int, body: JournalTrade):
     c = conn.cursor()
     c.execute("""
         INSERT INTO trades (date, news1, news2, news3, entry, ratio, sl, previous, forecast, actual, outcome, improvement, news_event_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
     """, (
         event["event_date"], event["your_name"], body.news2 or "", body.news3 or "",
         body.entry or "", body.ratio, body.sl, event.get("previous") or "",
         event.get("forecast") or "", event.get("actual") or "",
         body.outcome, body.improvement or "", event_id,
     ))
-    trade_id = c.lastrowid
+    trade_id = c.fetchone()["id"]
     conn.commit()
     conn.close()
     return {"id": trade_id, "message": "Trade saved"}

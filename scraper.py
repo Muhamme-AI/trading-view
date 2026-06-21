@@ -4,15 +4,13 @@ Pulls news events, matches to your watchlist, fetches GBP/USD reactions from OAN
 """
 
 import httpx
-import sqlite3
 import asyncio
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from bs4 import BeautifulSoup
 import re
 import json
 
-DB_PATH = Path(__file__).parent / "trading.db"
+from db import get_db, check_connection
 
 # ── NEWS EVENT MAP ────────────────────────────────────────
 # Maps your internal name → (forex_factory_keyword, country, impact_colours)
@@ -51,79 +49,9 @@ NEWS_MAP = [
 ]
 
 # ── DB HELPERS ────────────────────────────────────────────
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
 def ensure_tables():
-    conn = get_db()
-    c = conn.cursor()
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS news_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            your_name TEXT NOT NULL,
-            ff_title TEXT,
-            country TEXT NOT NULL,
-            event_date TEXT NOT NULL,
-            event_time TEXT,
-            previous TEXT,
-            forecast TEXT,
-            actual TEXT,
-            impact TEXT,
-            beat_miss TEXT,
-            created_at TEXT DEFAULT (datetime('now')),
-            UNIQUE(your_name, event_date, event_time)
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS price_reactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            news_event_id INTEGER NOT NULL,
-            pip_5m REAL,
-            pip_15m REAL,
-            pip_30m REAL,
-            pip_60m REAL,
-            direction_5m TEXT,
-            direction_15m TEXT,
-            open_price REAL,
-            price_5m REAL,
-            price_15m REAL,
-            price_30m REAL,
-            price_60m REAL,
-            fetched_at TEXT DEFAULT (datetime('now')),
-            FOREIGN KEY(news_event_id) REFERENCES news_events(id),
-            UNIQUE(news_event_id)
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS sync_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            started_at TEXT,
-            finished_at TEXT,
-            events_found INTEGER DEFAULT 0,
-            events_new INTEGER DEFAULT 0,
-            reactions_fetched INTEGER DEFAULT 0,
-            status TEXT,
-            error TEXT
-        )
-    """)
-
-    try:
-        c.execute("ALTER TABLE news_events ADD COLUMN user_note TEXT")
-    except Exception:
-        pass
-
-    try:
-        c.execute("ALTER TABLE trades ADD COLUMN news_event_id INTEGER")
-    except Exception:
-        pass
-
-    conn.commit()
-    conn.close()
+    """Schema is managed by Supabase migrations; verify connectivity."""
+    check_connection()
 
 # ── FOREX FACTORY SCRAPER ─────────────────────────────────
 def build_ff_url(year: int, month: int) -> str:
@@ -421,19 +349,19 @@ def save_events(events: list) -> tuple[int, int]:
     for ev in events:
         try:
             c.execute("""
-                INSERT OR IGNORE INTO news_events
+                INSERT INTO news_events
                 (your_name, ff_title, country, event_date, event_time, previous, forecast, actual, impact, beat_miss)
-                VALUES (?,?,?,?,?,?,?,?,?,?)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (your_name, event_date, event_time) DO NOTHING
             """, (ev["your_name"], ev["ff_title"], ev["country"], ev["event_date"],
                   ev["event_time"], ev["previous"], ev["forecast"], ev["actual"],
                   ev["impact"], ev["beat_miss"]))
             if c.rowcount > 0:
                 new_count += 1
             else:
-                # Update actual/beat_miss if event exists but had no actual yet
                 c.execute("""
-                    UPDATE news_events SET actual=?, beat_miss=?
-                    WHERE your_name=? AND event_date=? AND event_time=?
+                    UPDATE news_events SET actual=%s, beat_miss=%s
+                    WHERE your_name=%s AND event_date=%s AND event_time=%s
                     AND (actual='' OR actual IS NULL)
                 """, (ev["actual"], ev["beat_miss"], ev["your_name"], ev["event_date"], ev["event_time"]))
         except Exception as e:
@@ -445,10 +373,16 @@ def save_events(events: list) -> tuple[int, int]:
 def save_reaction(event_id: int, reaction: dict):
     conn = get_db()
     conn.execute("""
-        INSERT OR REPLACE INTO price_reactions
+        INSERT INTO price_reactions
         (news_event_id, pip_5m, pip_15m, pip_30m, pip_60m, direction_5m, direction_15m,
          open_price, price_5m, price_15m, price_30m, price_60m)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT (news_event_id) DO UPDATE SET
+            pip_5m=excluded.pip_5m, pip_15m=excluded.pip_15m, pip_30m=excluded.pip_30m, pip_60m=excluded.pip_60m,
+            direction_5m=excluded.direction_5m, direction_15m=excluded.direction_15m,
+            open_price=excluded.open_price, price_5m=excluded.price_5m, price_15m=excluded.price_15m,
+            price_30m=excluded.price_30m, price_60m=excluded.price_60m,
+            fetched_at=NOW()
     """, (event_id, reaction.get("pip_5m"), reaction.get("pip_15m"),
           reaction.get("pip_30m"), reaction.get("pip_60m"),
           reaction.get("direction_5m"), reaction.get("direction_15m"),
@@ -464,7 +398,7 @@ def get_events_without_reactions() -> list:
         LEFT JOIN price_reactions pr ON pr.news_event_id = ne.id
         WHERE pr.id IS NULL
         AND ne.actual != '' AND ne.actual IS NOT NULL
-        AND ne.event_date <= date('now')
+        AND ne.event_date <= CURRENT_DATE
         ORDER BY ne.event_date DESC
     """).fetchall()
     conn.close()
@@ -478,9 +412,11 @@ async def run_sync(progress_callback=None, start_date: datetime | None = None) -
 
     log_conn = get_db()
     log_c = log_conn.cursor()
-    log_c.execute("INSERT INTO sync_log (started_at, status) VALUES (?, ?)",
-                  (datetime.now().isoformat(), "running"))
-    log_id = log_c.lastrowid
+    log_c.execute(
+        "INSERT INTO sync_log (started_at, status) VALUES (%s, %s) RETURNING id",
+        (datetime.now().isoformat(), "running"),
+    )
+    log_id = log_c.fetchone()["id"]
     log_conn.commit()
     log_conn.close()
 
@@ -555,8 +491,8 @@ async def run_sync(progress_callback=None, start_date: datetime | None = None) -
     # Update sync log
     log_conn = get_db()
     log_conn.execute("""
-        UPDATE sync_log SET finished_at=?, events_found=?, events_new=?,
-        reactions_fetched=?, status=?, error=? WHERE id=?
+        UPDATE sync_log SET finished_at=%s, events_found=%s, events_new=%s,
+        reactions_fetched=%s, status=%s, error=%s WHERE id=%s
     """, (datetime.now().isoformat(), total_events, new_events,
           reactions_fetched, status, "; ".join(errors) if errors else None, log_id))
     log_conn.commit()
@@ -600,7 +536,7 @@ def get_analysis_summary() -> list:
             MIN(pr.pip_5m) as min_pip_5m
         FROM news_events ne
         LEFT JOIN price_reactions pr ON pr.news_event_id = ne.id
-        GROUP BY ne.your_name, ne.country
+        GROUP BY ne.your_name, ne.country, ne.impact
         ORDER BY avg_pip_5m DESC NULLS LAST
     """).fetchall()
     conn.close()
@@ -647,7 +583,7 @@ def get_event_history(your_name: str) -> list:
                pr.direction_5m, pr.direction_15m, pr.open_price
         FROM news_events ne
         LEFT JOIN price_reactions pr ON pr.news_event_id = ne.id
-        WHERE ne.your_name = ?
+        WHERE ne.your_name = %s
         ORDER BY ne.event_date DESC
     """, (your_name,)).fetchall()
     conn.close()
@@ -680,7 +616,7 @@ def get_journal_rows() -> list:
 def save_journal_note(event_id: int, note: str) -> bool:
     conn = get_db()
     cur = conn.execute(
-        "UPDATE news_events SET user_note = ? WHERE id = ?",
+        "UPDATE news_events SET user_note = %s WHERE id = %s",
         (note, event_id),
     )
     conn.commit()
@@ -690,7 +626,7 @@ def save_journal_note(event_id: int, note: str) -> bool:
 
 def get_news_event(event_id: int) -> dict | None:
     conn = get_db()
-    row = conn.execute("SELECT * FROM news_events WHERE id = ?", (event_id,)).fetchone()
+    row = conn.execute("SELECT * FROM news_events WHERE id = %s", (event_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
 
@@ -818,13 +754,13 @@ def get_brief(event_name: str) -> dict:
             SELECT ne.*, pr.pip_5m, pr.pip_15m, pr.pip_30m, pr.pip_60m, pr.direction_5m
             FROM news_events ne
             LEFT JOIN price_reactions pr ON pr.news_event_id = ne.id
-            WHERE ne.your_name = ?
+            WHERE ne.your_name = %s
             AND ne.event_date >= '2020-01-01'
             ORDER BY ne.event_date DESC
         """, (event_name,)).fetchall()
         trades = conn.execute("SELECT * FROM trades ORDER BY date DESC").fetchall()
         rating_row = conn.execute(
-            "SELECT type, comment FROM news_ratings WHERE name = ?", (event_name,)
+            "SELECT type, comment FROM news_ratings WHERE name = %s", (event_name,)
         ).fetchone()
 
         events = [dict(r) for r in rows]
@@ -835,7 +771,7 @@ def get_brief(event_name: str) -> dict:
         today = datetime.now().strftime("%Y-%m-%d")
         upcoming_row = conn.execute("""
             SELECT * FROM news_events
-            WHERE your_name = ? AND event_date >= ?
+            WHERE your_name = %s AND event_date >= %s
             ORDER BY event_date ASC LIMIT 1
         """, (event_name, today)).fetchone()
         upcoming = dict(upcoming_row) if upcoming_row else dict(events[0])
@@ -848,7 +784,7 @@ def get_brief(event_name: str) -> dict:
 
         same_day_rows = conn.execute("""
             SELECT DISTINCT your_name FROM news_events
-            WHERE event_date = ? AND your_name != ?
+            WHERE event_date = %s AND your_name != %s
             ORDER BY your_name
         """, (release_date, event_name)).fetchall()
         same_day_events = [r["your_name"] for r in same_day_rows]
