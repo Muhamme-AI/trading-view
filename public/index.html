@@ -1,0 +1,1783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GBP/USD Trading Intelligence</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0a0f1e;--surface:#141b2d;--surface2:#1c2640;--border:#2a3556;
+    --accent:#f5a623;--accent-dim:rgba(245,166,35,0.12);
+    --green:#22c55e;--green-dim:rgba(34,197,94,0.12);
+    --red:#ef4444;--red-dim:rgba(239,68,68,0.12);
+    --amber:#f59e0b;--amber-dim:rgba(245,158,11,0.12);
+    --blue:#3b82f6;--blue-dim:rgba(59,130,246,0.12);
+    --text:#e8edf5;--text2:#8b9ab8;--text3:#4a5568;
+    --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+  }
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px}
+  .app{display:flex;height:100vh;overflow:hidden}
+  .sidebar{width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:24px 0}
+  .logo{padding:0 20px 24px;border-bottom:1px solid var(--border);margin-bottom:16px}
+  .logo-pair{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent)}
+  .logo-sub{font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;border-left:2px solid transparent;transition:all 0.15s;user-select:none}
+  .nav-item:hover{color:var(--text);background:var(--accent-dim)}
+  .nav-item.active{color:var(--accent);border-left-color:var(--accent);background:var(--accent-dim)}
+  .sidebar-footer{margin-top:auto;padding:16px 20px 0;border-top:1px solid var(--border)}
+  .conn-dot{width:7px;height:7px;border-radius:50%;background:var(--red);display:inline-block;margin-right:6px}
+  .conn-dot.on{background:var(--green)}
+  .conn-status{font-size:11px;color:var(--text2);display:flex;align-items:center}
+  .main{flex:1;overflow-y:auto;padding:28px 32px}
+  .page-header{margin-bottom:28px}
+  .page-title{font-size:20px;font-weight:700}
+  .page-sub{font-size:12px;color:var(--text2);margin-top:4px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
+  .card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);margin-bottom:16px}
+  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+  .stats-grid-5{grid-template-columns:repeat(5,1fr)}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+  .stat-label{font-size:11px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+  .stat-value{font-family:var(--mono);font-size:28px;font-weight:700;line-height:1}
+  .stat-value.green{color:var(--green)}.stat-value.red{color:var(--red)}.stat-value.amber{color:var(--amber)}.stat-value.blue{color:var(--blue)}
+  .stat-sub{font-size:11px;color:var(--text3);margin-top:6px}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  .table-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;padding:10px 12px;color:var(--text2);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border);white-space:nowrap}
+  td{padding:11px 12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:var(--surface2)}
+  .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;font-family:var(--mono)}
+  .badge.win{background:var(--green-dim);color:var(--green)}
+  .badge.loss{background:var(--red-dim);color:var(--red)}
+  .badge.caution{background:var(--amber-dim);color:var(--amber)}
+  .badge.blue{background:var(--blue-dim);color:var(--blue)}
+  .badge.neutral{background:var(--surface2);color:var(--text3)}
+  .country-flag{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600}
+  .flag-us{color:#60a5fa}.flag-uk{color:#f472b6}
+  .news-tag{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:10px;color:var(--text2);margin:1px}
+  .mono{font-family:var(--mono)}
+  .delete-btn{cursor:pointer;color:var(--text3);font-size:14px;background:none;border:none;padding:2px 6px;border-radius:4px;transition:all 0.15s}
+  .delete-btn:hover{color:var(--red);background:var(--red-dim)}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  .form-group{display:flex;flex-direction:column;gap:6px}
+  label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px}
+  input,select,textarea{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--sans);font-size:13px;padding:9px 12px;outline:none;transition:border-color 0.15s}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  input::placeholder,textarea::placeholder{color:var(--text3)}
+  select option{background:var(--surface2)}
+  textarea{resize:vertical;min-height:70px}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:6px;border:none;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:600;transition:all 0.15s}
+  .btn-primary{background:var(--accent);color:#0a0f1e}
+  .btn-primary:hover{background:#ffb84d}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+  .btn-danger{background:var(--red-dim);color:var(--red);border:1px solid transparent}
+  .btn-danger:hover{background:var(--red);color:#fff}
+  .btn-blue{background:var(--blue-dim);color:var(--blue);border:1px solid var(--blue)}
+  .btn-blue:hover{background:var(--blue);color:#fff}
+  .divider{height:1px;background:var(--border);margin:20px 0}
+  .signal-box{border-radius:10px;padding:20px 24px;display:flex;align-items:flex-start;gap:16px;border:1px solid;margin-top:20px}
+  .signal-box.go{background:var(--green-dim);border-color:var(--green)}
+  .signal-box.no-trade{background:var(--red-dim);border-color:var(--red)}
+  .signal-box.caution{background:var(--amber-dim);border-color:var(--amber)}
+  .signal-box.neutral{background:var(--surface2);border-color:var(--border)}
+  .signal-icon{font-size:28px;line-height:1}
+  .signal-label{font-family:var(--mono);font-size:18px;font-weight:700;margin-bottom:6px}
+  .signal-box.go .signal-label{color:var(--green)}
+  .signal-box.no-trade .signal-label{color:var(--red)}
+  .signal-box.caution .signal-label{color:var(--amber)}
+  .signal-reasoning{font-size:12px;color:var(--text2);line-height:1.7}
+  .signal-reasoning li{margin-left:16px;margin-top:2px}
+  .past-match{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-top:8px}
+  .chart-bars{display:flex;align-items:flex-end;gap:6px;height:80px}
+  .chart-bar-wrap{display:flex;flex-direction:column;align-items:center;flex:1;height:100%;justify-content:flex-end}
+  .chart-bar{width:100%;border-radius:3px 3px 0 0;min-height:3px}
+  .win-bar{background:var(--green)}.loss-bar{background:var(--red)}
+  .chart-label{font-size:9px;color:var(--text3);margin-top:4px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52px}
+  .empty-state{text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;line-height:1.6}
+  .settings-section-title{font-size:13px;font-weight:700;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+  ::-webkit-scrollbar{width:6px}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 18px;font-size:13px;box-shadow:0 8px 32px rgba(0,0,0,0.4);transform:translateY(80px);opacity:0;transition:all 0.3s;z-index:999}
+  .toast.show{transform:translateY(0);opacity:1}
+  .toast.success{border-left:3px solid var(--green)}
+  .toast.error{border-left:3px solid var(--red)}
+  .td-notes{font-size:11px;color:var(--text2);max-width:200px;line-height:1.5}
+  /* Analysis specific */
+  .pip-pill{display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;font-family:var(--mono);font-size:11px;font-weight:700}
+  .pip-pill.high{background:var(--green-dim);color:var(--green)}
+  .pip-pill.mid{background:var(--amber-dim);color:var(--amber)}
+  .pip-pill.low{background:var(--red-dim);color:var(--red)}
+  .pip-pill.none{background:var(--surface2);color:var(--text3)}
+  .dir-arrow{font-size:14px}
+  .dir-up{color:var(--green)}.dir-down{color:var(--red)}
+  .consistency-bar{height:6px;border-radius:3px;background:var(--border);margin-top:4px;overflow:hidden}
+  .consistency-fill{height:100%;border-radius:3px;background:var(--accent)}
+  .sync-progress{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:20px}
+  .progress-bar{height:8px;background:var(--border);border-radius:4px;margin-top:8px;overflow:hidden}
+  .progress-fill{height:100%;border-radius:4px;background:var(--accent);transition:width 0.3s}
+  .event-detail-row{cursor:pointer}
+  .event-detail-row:hover td{background:var(--accent-dim)}
+  .tradeable-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px}
+  .tradeable-yes{background:var(--green-dim);color:var(--green)}
+  .tradeable-no{background:var(--surface2);color:var(--text3)}
+  .filter-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:20px}
+  .filter-bar .form-group{min-width:140px;margin:0}
+  .filter-bar label{font-size:10px}
+  .filter-bar select,.filter-bar input{font-size:12px;padding:7px 10px}
+  .filter-toggle{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;user-select:none;padding-bottom:8px}
+  .filter-toggle input{accent-color:var(--accent);width:14px;height:14px}
+  .tab-bar{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0}
+  .tab-btn{padding:10px 18px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);margin-bottom:-1px}
+  .tab-btn:hover{color:var(--text)}
+  .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .day-header{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);padding:12px 0 8px;border-bottom:1px solid var(--border);margin-top:16px}
+  .day-header:first-child{margin-top:0}
+  .upcoming-row{display:grid;grid-template-columns:80px 1fr 90px 70px 60px 60px 60px auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:12px}
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;display:flex;align-items:center;justify-content:center;padding:24px}
+  .modal-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:640px;width:100%;max-height:85vh;overflow-y:auto}
+  .brief-modal-box{max-width:920px}
+  .brief-section{margin-bottom:24px}
+  .brief-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);margin-bottom:12px}
+  .brief-decision-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+  .brief-forecast{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent);margin-top:8px}
+  .brief-step{font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:10px;padding-left:4px}
+  .live-assistant-wrap{border:2px solid var(--accent);background:var(--accent-dim);border-radius:10px;padding:18px}
+  .live-timer{font-family:var(--mono);font-size:36px;font-weight:700;color:var(--accent);margin:12px 0}
+  .live-verdict-buy{font-size:28px;font-weight:700;color:var(--green);margin:12px 0}
+  .live-verdict-sell{font-size:28px;font-weight:700;color:var(--red);margin:12px 0}
+  .live-verdict-skip{font-size:28px;font-weight:700;color:var(--amber);margin:12px 0}
+  .live-progress{height:10px;border-radius:5px;background:linear-gradient(90deg,var(--red),var(--green));position:relative;margin:12px 0}
+  .live-progress-marker{position:absolute;top:-4px;width:4px;height:18px;background:var(--accent);border-radius:2px;transform:translateX(-50%)}
+  .live-stage-box{padding:16px;border-radius:10px;margin-top:12px;line-height:1.7;font-size:13px}
+  .live-stage-go{background:var(--green-dim);border:1px solid var(--green)}
+  .live-stage-no{background:var(--red-dim);border:1px solid var(--red)}
+  .live-stage-warn{background:var(--amber-dim);border:1px solid var(--amber)}
+  .perf-insight{font-size:12px;color:var(--text2);font-style:italic;margin-top:10px;line-height:1.6}
+  .perf-dots{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+  .perf-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+  .perf-dot.win{background:var(--green)}
+  .perf-dot.loss{background:var(--red)}
+  .perf-half-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+  .perf-half-block{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12px;line-height:1.9}
+  .perf-half-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:8px}
+  @media(max-width:900px){.stats-grid-5{grid-template-columns:repeat(2,1fr)}.brief-decision-grid{grid-template-columns:1fr}}
+  .modal-title{font-size:18px;font-weight:700;margin-bottom:4px}
+  .note-cell{min-width:120px;font-size:11px;color:var(--text2);cursor:text;padding:4px 6px;border-radius:4px;border:1px solid transparent}
+  .note-cell:hover{border-color:var(--border)}
+  .note-cell:focus{border-color:var(--accent);outline:none;background:var(--surface2)}
+  .inline-trade-form{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin:8px 0}
+  @media(max-width:900px){.stats-grid{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}.form-grid-3{grid-template-columns:1fr 1fr}.three-col{grid-template-columns:1fr 1fr}.upcoming-row{grid-template-columns:1fr;gap:6px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar">
+    <div class="logo">
+      <div class="logo-pair">GBP/USD</div>
+      <div class="logo-sub">Trading Intelligence</div>
+    </div>
+    <div class="nav-item" onclick="nav('thisweek')"><span>📅</span> This Week</div>
+    <div class="nav-item active" onclick="nav('dashboard')"><span>📊</span> Dashboard</div>
+    <div class="nav-item" onclick="nav('performance')"><span>📈</span> Performance</div>
+    <div class="nav-item" onclick="nav('analysis')"><span>🔬</span> Analysis</div>
+    <div class="nav-item" onclick="nav('journal')"><span>📖</span> Journal</div>
+    <div class="nav-item" onclick="nav('scorer')"><span>🎯</span> News Scorer</div>
+    <div class="nav-item" onclick="nav('log')"><span>➕</span> Log Trade</div>
+    <div class="nav-item" onclick="nav('newscheck')"><span>📰</span> News Ratings</div>
+    <div class="nav-item" onclick="nav('settings')"><span>⚙️</span> Settings</div>
+    <div class="sidebar-footer">
+      <div class="conn-status">
+        <span class="conn-dot" id="conn-dot"></span>
+        <span id="conn-label">Not connected</span>
+      </div>
+    </div>
+  </nav>
+  <main class="main" id="main"></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000/api'
+  : `${location.origin}/api`;
+const NAV_PAGES = ['thisweek','dashboard','performance','analysis','journal','scorer','log','newscheck','settings'];
+let page = 'dashboard';
+let ratings = [];
+let syncPollTimer = null;
+let journalTab = 'events';
+let journalDataCache = null;
+let pendingLogNews = '';
+let pendingLogPrefill = null;
+let liveAssistantState = null;
+let filterState = { range: 'all', dateFrom: '', dateTo: '', country: 'all', impact: 'all', tradeableOnly: false };
+
+// ── API HELPERS ───────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = {method, headers:{'Content-Type':'application/json'}};
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API + path, opts);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+const GET  = path       => api('GET', path);
+const POST = (path, b)  => api('POST', path, b);
+const DEL  = path       => api('DELETE', path);
+
+// ── FILTERS & HELPERS ─────────────────────────────────────
+function getDateBounds() {
+  const today = new Date().toISOString().split('T')[0];
+  if (filterState.range === 'after_trump') return { from: '2025-01-20', to: today };
+  if (filterState.range === 'before_trump') return { from: '2020-01-01', to: '2025-01-19' };
+  if (filterState.range === 'custom') return { from: filterState.dateFrom || '2020-01-01', to: filterState.dateTo || today };
+  return { from: '2020-01-01', to: today };
+}
+
+function applyRowFilters(rows) {
+  const { from, to } = getDateBounds();
+  return rows.filter(r => {
+    if (r.event_date < from || r.event_date > to) return false;
+    if (filterState.country !== 'all' && r.country !== filterState.country) return false;
+    if (filterState.impact !== 'all' && r.impact !== filterState.impact) return false;
+    if (filterState.tradeableOnly && (r.pip_5m == null || r.pip_5m < 10)) return false;
+    return true;
+  });
+}
+
+function aggregateAnalysis(rows) {
+  const groups = {};
+  rows.forEach(r => { (groups[r.your_name] = groups[r.your_name] || []).push(r); });
+  const avg = arr => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length * 10) / 10 : null;
+  return Object.entries(groups).map(([your_name, evs]) => {
+    const p5 = evs.filter(e => e.pip_5m != null).map(e => e.pip_5m);
+    const p15 = evs.filter(e => e.pip_15m != null).map(e => e.pip_15m);
+    const p30 = evs.filter(e => e.pip_30m != null).map(e => e.pip_30m);
+    let beat = 0, miss = 0, beat_up = 0, beat_down = 0, miss_up = 0, miss_down = 0;
+    evs.forEach(e => {
+      if (e.beat_miss === 'beat') { beat++; if (e.direction_5m === 'up') beat_up++; else if (e.direction_5m === 'down') beat_down++; }
+      if (e.beat_miss === 'miss') { miss++; if (e.direction_5m === 'up') miss_up++; else if (e.direction_5m === 'down') miss_down++; }
+    });
+    const avg5 = avg(p5);
+    let beat_direction = null, beat_consistency = null, miss_direction = null, miss_consistency = null;
+    if (beat > 0) { beat_direction = beat_up > beat_down ? 'up' : 'down'; beat_consistency = Math.round(Math.max(beat_up, beat_down) / beat * 100); }
+    if (miss > 0) { miss_direction = miss_up > miss_down ? 'up' : 'down'; miss_consistency = Math.round(Math.max(miss_up, miss_down) / miss * 100); }
+    return { your_name, country: evs[0].country, impact: evs[0].impact, total_occurrences: evs.length,
+      avg_pip_5m: avg5, avg_pip_15m: avg(p15), avg_pip_30m: avg(p30),
+      beat_direction, beat_consistency, miss_direction, miss_consistency, tradeable: (avg5 || 0) >= 10 };
+  }).sort((a, b) => (b.avg_pip_5m || 0) - (a.avg_pip_5m || 0));
+}
+
+function whatThisMeans(ev) {
+  const avg5 = ev.avg_pip_5m || 0;
+  const beatC = ev.beat_consistency || 0;
+  const missC = ev.miss_consistency || 0;
+  const bestC = Math.max(beatC, missC);
+  const scenario = beatC >= missC ? 'beat' : 'miss';
+  const dir = scenario === 'beat' ? ev.beat_direction : ev.miss_direction;
+  const arrow = dir === 'up' ? '▲' : '▼';
+  if (avg5 >= 15 && bestC >= 70) return `Strong trade. ${scenario.charAt(0).toUpperCase() + scenario.slice(1)} → ${arrow} ${bestC}% of the time.`;
+  if (avg5 >= 10 && bestC >= 60) return `Tradeable with caution. Watch for ${dir} on ${scenario}.`;
+  return 'Low power — skip unless exceptional reaction.';
+}
+
+function countryBadge(c) {
+  return c === 'USD' ? '<span class="country-flag flag-us">🇺🇸 USD</span>' : '<span class="country-flag flag-uk">🇬🇧 GBP</span>';
+}
+
+function pipClass(v) { if (!v) return 'none'; if (v >= 15) return 'high'; if (v >= 8) return 'mid'; return 'low'; }
+function pipLabel(v) { return v != null ? v.toFixed(1) + 'p' : '—'; }
+function dirIcon(d) { return d === 'up' ? '<span class="dir-up">▲</span>' : d === 'down' ? '<span class="dir-down">▼</span>' : '—'; }
+function bmBadge(bm) {
+  if (bm === 'beat') return '<span class="badge win">BEAT</span>';
+  if (bm === 'miss') return '<span class="badge loss">MISS</span>';
+  if (bm === 'inline') return '<span class="badge neutral">INLINE</span>';
+  return '<span class="badge neutral">—</span>';
+}
+
+function renderFilterBar(refreshFn) {
+  const custom = filterState.range === 'custom' ? `
+    <div class="form-group"><label>From</label><input type="date" class="mono" value="${filterState.dateFrom}" onchange="filterState.dateFrom=this.value;${refreshFn}()"></div>
+    <div class="form-group"><label>To</label><input type="date" class="mono" value="${filterState.dateTo}" onchange="filterState.dateTo=this.value;${refreshFn}()"></div>` : '';
+  return `<div class="card filter-bar">
+    <div class="form-group"><label>Date Range</label>
+      <select onchange="filterState.range=this.value;${refreshFn}()">
+        <option value="all" ${filterState.range==='all'?'selected':''}>All Time</option>
+        <option value="after_trump" ${filterState.range==='after_trump'?'selected':''}>After Trump (Jan 20 2025+)</option>
+        <option value="before_trump" ${filterState.range==='before_trump'?'selected':''}>Before Trump (to Jan 19 2025)</option>
+        <option value="custom" ${filterState.range==='custom'?'selected':''}>Custom</option>
+      </select></div>
+    ${custom}
+    <div class="form-group"><label>Country</label>
+      <select onchange="filterState.country=this.value;${refreshFn}()">
+        <option value="all" ${filterState.country==='all'?'selected':''}>All</option>
+        <option value="USD" ${filterState.country==='USD'?'selected':''}>🇺🇸 USD only</option>
+        <option value="GBP" ${filterState.country==='GBP'?'selected':''}>🇬🇧 GBP only</option>
+      </select></div>
+    <div class="form-group"><label>Impact</label>
+      <select onchange="filterState.impact=this.value;${refreshFn}()">
+        <option value="all" ${filterState.impact==='all'?'selected':''}>All</option>
+        <option value="red" ${filterState.impact==='red'?'selected':''}>Red only</option>
+        <option value="orange" ${filterState.impact==='orange'?'selected':''}>Orange only</option>
+      </select></div>
+    <label class="filter-toggle"><input type="checkbox" ${filterState.tradeableOnly?'checked':''} onchange="filterState.tradeableOnly=this.checked;${refreshFn}()"> Tradeable only (10p+ 5M)</label>
+  </div>`;
+}
+
+// ── NAV ───────────────────────────────────────────────────
+function nav(p) {
+  page = p;
+  document.querySelectorAll('.nav-item').forEach((el, i) => {
+    el.classList.toggle('active', NAV_PAGES[i] === p);
+  });
+  render();
+}
+
+async function render() {
+  const m = document.getElementById('main');
+  m.innerHTML = '<div class="empty-state">Loading...</div>';
+  try {
+    if      (page === 'thisweek')  await renderThisWeek();
+    else if (page === 'dashboard') await renderDash();
+    else if (page === 'performance') await renderPerformance();
+    else if (page === 'analysis')  await renderAnalysis();
+    else if (page === 'journal')   await renderJournal();
+    else if (page === 'scorer')    await renderScorer();
+    else if (page === 'log')       await renderLog();
+    else if (page === 'newscheck') await renderNewsCheck();
+    else if (page === 'settings')  await renderSettings();
+  } catch(e) {
+    m.innerHTML = `<div class="empty-state" style="color:var(--red)">Error: ${e.message}<br><br>Make sure app.py is running.</div>`;
+  }
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────
+async function renderDash() {
+  const [s, recent] = await Promise.all([GET('/analytics'), GET('/trades')]);
+  const top5 = recent.slice(0,5);
+  const max = Math.max(...(s.news_performance||[]).map(n=>n.total),1);
+  const bars = (s.news_performance||[]).slice(0,6).map(n=>{
+    const wh=Math.round(n.wins/max*65), lh=Math.round(n.losses/max*65);
+    const nm=n.news.replace(/ US$| UK$/,'').substring(0,13);
+    return `<div class="chart-bar-wrap"><div style="display:flex;align-items:flex-end;gap:2px;height:65px"><div class="chart-bar win-bar" style="height:${wh}px;width:10px"></div><div class="chart-bar loss-bar" style="height:${lh}px;width:10px"></div></div><div class="chart-label" title="${n.news}">${nm}</div></div>`;
+  }).join('');
+  document.getElementById('main').innerHTML = `
+    <div class="page-header"><div class="page-title">Dashboard</div><div class="page-sub">GBP/USD &middot; 5M &middot; News-driven strategy</div></div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value ${s.win_rate>=50?'green':'red'}">${s.win_rate}%</div><div class="stat-sub">${s.wins}W / ${s.losses}L of ${s.total} trades</div></div>
+      <div class="stat-card"><div class="stat-label">Avg R:R (wins)</div><div class="stat-value amber">${s.avg_ratio?'1:'+s.avg_ratio:'—'}</div><div class="stat-sub">Risk:Reward on winning trades</div></div>
+      <div class="stat-card"><div class="stat-label">Total Trades</div><div class="stat-value">${s.total}</div><div class="stat-sub">Logged since tracking started</div></div>
+      <div class="stat-card"><div class="stat-label">GBP/USD Price</div><div class="stat-value" id="price-val" style="font-size:20px">—</div><div class="stat-sub" id="price-chg">Fetching...</div></div>
+    </div>
+    <div class="two-col">
+      <div class="card"><div class="card-title">News Performance (your trades)</div>
+        ${bars?`<div class="chart-bars">${bars}</div><div style="display:flex;gap:16px;margin-top:12px"><span style="font-size:11px;color:var(--green)">&#9632; Wins</span><span style="font-size:11px;color:var(--red)">&#9632; Losses</span></div>`:'<div class="empty-state">Log trades to see data</div>'}
+      </div>
+      <div class="card"><div class="card-title">Latest Trades</div>
+        ${top5.length?`<table><tr><th>Date</th><th>News</th><th>R:R</th><th>Result</th></tr>
+          ${top5.map(t=>`<tr><td class="mono" style="font-size:11px">${t.date}</td>
+            <td>${[t.news1,t.news2,t.news3].filter(Boolean).map(n=>`<span class="news-tag">${n.replace(/ US$| UK$/,'')}</span>`).join('')}</td>
+            <td class="mono">${t.ratio?'1:'+t.ratio:'—'}</td>
+            <td><span class="badge ${t.outcome==='Win'?'win':'loss'}">${t.outcome.toUpperCase()}</span></td></tr>`).join('')}</table>`
+          :'<div class="empty-state">No trades yet</div>'}
+      </div>
+    </div>`;
+  loadPrice();
+}
+
+async function loadPrice() {
+  try {
+    const d = await GET('/oanda/price');
+    const diff = (d.close - d.prev_close).toFixed(5);
+    const up = diff >= 0;
+    const pv = document.getElementById('price-val');
+    const pc = document.getElementById('price-chg');
+    if (pv) pv.textContent = d.close.toFixed(5);
+    if (pc) pc.innerHTML = `<span style="color:${up?'var(--green)':'var(--red)'}">${up?'+':''}${diff} (5M)</span>`;
+    setConn(true);
+  } catch(e) {
+    const pc = document.getElementById('price-chg');
+    if (pc) pc.textContent = 'Connect OANDA in Settings';
+  }
+}
+
+// ── PERFORMANCE ───────────────────────────────────────────
+function perfWrColor(wr) {
+  if (wr >= 70) return 'var(--green)';
+  if (wr >= 50) return 'var(--amber)';
+  return 'var(--red)';
+}
+
+function perfEventBadge(count, wr) {
+  if (count < 2) return '<span class="badge neutral" style="margin-left:6px">⚪ SMALL SAMPLE</span>';
+  if (wr >= 70 && count >= 3) return '<span class="badge win" style="margin-left:6px">🟢 STRONG</span>';
+  if (wr >= 50 && count >= 3) return '<span class="badge caution" style="margin-left:6px">🟡 OK</span>';
+  if (wr < 50 && count >= 2) return '<span class="badge loss" style="margin-left:6px">🔴 WEAK</span>';
+  return '<span class="badge neutral" style="margin-left:6px">⚪ SMALL SAMPLE</span>';
+}
+
+function perfMonthShort(label) {
+  const parts = label.split(' ');
+  if (parts.length < 2) return label;
+  return `${parts[0]} ${String(parts[1]).slice(-2)}`;
+}
+
+function perfMilestone(total) {
+  if (total >= 100) return { text: 'You have a statistically significant sample. Your edge (or lack of it) is now clear in the numbers.', target: 100, pct: 100, green: true };
+  if (total >= 50) return { text: `Solid sample building. ${100 - total} more trades to statistical confidence.`, target: 100, pct: total };
+  if (total >= 30) return { text: `Patterns forming. ${50 - total} more trades to reliable statistics.`, target: 50, pct: total };
+  if (total >= 10) return { text: `Early data emerging. ${30 - total} more trades to pattern recognition.`, target: 30, pct: total };
+  return { text: `Building your baseline. ${10 - total} more trades to first review.`, target: 10, pct: total };
+}
+
+function perfHalfStats(trades) {
+  const wins = trades.filter(t => t.outcome === 'Win');
+  const total = trades.length;
+  const wr = total ? Math.round(wins.length / total * 100) : 0;
+  const ratios = wins.map(t => t.ratio).filter(r => r != null);
+  const avgRr = ratios.length ? (Math.round(ratios.reduce((a, b) => a + b, 0) / ratios.length * 10) / 10) : null;
+  return { total, wr, avgRr };
+}
+
+async function renderPerformance() {
+  const data = await GET('/performance');
+  const o = data.overall;
+  const total = o.total_trades;
+
+  if (!total) {
+    document.getElementById('main').innerHTML = `
+      <div class="page-header"><div class="page-title">Performance</div><div class="page-sub">Your trading results over time</div></div>
+      <div class="card"><div class="empty-state">Start logging trades to see your performance.<br><br>Every trade you log here becomes data that makes your next trade smarter.</div></div>`;
+    return;
+  }
+
+  const streak = data.recent_streak;
+  const streakAbs = Math.abs(streak);
+  const streakLabel = streak > 0
+    ? `<span style="color:var(--green)">${streakAbs} WIN streak</span>`
+    : streak < 0
+      ? `<span style="color:var(--red)">${streakAbs} LOSS streak</span>`
+      : '—';
+  const streakHint = streak >= 3
+    ? '<div style="font-size:10px;color:var(--green);margin-top:4px">Keep the discipline</div>'
+    : streak <= -3
+      ? '<div style="font-size:10px;color:var(--red);margin-top:4px">Consider reducing size</div>'
+      : '';
+  const expClass = o.expectancy >= 0 ? 'green' : 'red';
+
+  const monthChart = data.by_month.length >= 2
+    ? `<div class="chart-bars">${data.by_month.map(m => {
+        const h = Math.max(3, Math.round(m.win_rate * 0.8));
+        const col = m.win_rate >= 50 ? 'var(--green)' : 'var(--red)';
+        return `<div class="chart-bar-wrap"><div class="chart-bar" style="height:${h}px;background:${col}" title="${m.win_rate}%"></div><div class="chart-label">${perfMonthShort(m.label)}</div></div>`;
+      }).join('')}</div>`
+    : `<div class="empty-state" style="padding:24px">Not enough data yet. Keep logging trades — this chart fills in as you build your history.</div>`;
+
+  const eventRows = data.by_event.map(e => `<tr>
+    <td>${e.event}${perfEventBadge(e.total, e.win_rate)}</td>
+    <td class="mono">${e.total}</td>
+    <td class="mono">${e.wins}</td>
+    <td class="mono" style="color:${perfWrColor(e.win_rate)}">${e.win_rate}%</td>
+    <td class="mono">${e.avg_rr ? '1:' + e.avg_rr : '—'}</td>
+  </tr>`).join('');
+
+  const timingRows = data.by_entry_timing.map(t => `<tr>
+    <td>${t.timing}</td>
+    <td class="mono">${t.total}</td>
+    <td class="mono" style="color:${perfWrColor(t.win_rate)}">${t.win_rate}%</td>
+  </tr>`).join('');
+
+  const last10Chrono = [...data.last_10].reverse();
+  const l10Wins = last10Chrono.filter(t => t.outcome === 'Win').length;
+  const l10Losses = last10Chrono.length - l10Wins;
+  const l10Wr = last10Chrono.length ? Math.round(l10Wins / last10Chrono.length * 100) : 0;
+  const l10Dots = last10Chrono.map(t =>
+    `<span class="perf-dot ${t.outcome === 'Win' ? 'win' : 'loss'}" title="${t.date} · ${t.event} · ${t.outcome}"></span>`
+  ).join('');
+  let l10Insight = 'Solid form. Stay consistent.';
+  if (l10Wr >= 70) l10Insight = 'Strong recent form. Your edge is working.';
+  else if (l10Wr >= 50 && l10Wr < 70) l10Insight = 'Solid form. Stay consistent.';
+  else if (l10Wr >= 30) l10Insight = 'Below average recent form. Review your last few trades before next entry.';
+  else l10Insight = 'Difficult recent run. Consider pausing and reviewing what\'s changed.';
+
+  let improvementHtml = '';
+  if (total >= 6) {
+    const chrono = [...data.trades].reverse();
+    const mid = Math.floor(chrono.length / 2);
+    const first = perfHalfStats(chrono.slice(0, mid));
+    const second = perfHalfStats(chrono.slice(mid));
+    let impVerdict = '➡ Consistent performance. Keep logging to see clearer trends.';
+    if (second.wr > first.wr + 5) impVerdict = `📈 You are improving. Win rate went from ${first.wr}% to ${second.wr}%.`;
+    else if (second.wr < first.wr - 5) impVerdict = '📉 Recent trades are underperforming your earlier results. Review your last 5 trades.';
+    improvementHtml = `
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">Improvement Tracker</div>
+        <div class="perf-half-grid">
+          <div class="perf-half-block">
+            <div class="perf-half-title">First ${first.total} trades</div>
+            Win rate: <span class="mono">${first.wr}%</span><br>
+            Avg R:R: <span class="mono">${first.avgRr ? '1:' + first.avgRr : '—'}</span>
+          </div>
+          <div class="perf-half-block">
+            <div class="perf-half-title">Second ${second.total} trades</div>
+            Win rate: <span class="mono">${second.wr}%</span><br>
+            Avg R:R: <span class="mono">${second.avgRr ? '1:' + second.avgRr : '—'}</span>
+          </div>
+        </div>
+        <div class="perf-insight">${impVerdict}</div>
+      </div>`;
+  }
+
+  const ms = perfMilestone(total);
+  const msFill = ms.green ? 'var(--green)' : 'var(--accent)';
+
+  document.getElementById('main').innerHTML = `
+    <div class="page-header"><div class="page-title">Performance</div><div class="page-sub">Your trading results over time</div></div>
+    <div class="stats-grid stats-grid-5">
+      <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value ${o.win_rate >= 50 ? 'green' : 'red'}">${o.win_rate}%</div><div class="stat-sub">${o.wins}W / ${o.losses}L of ${total} trades</div></div>
+      <div class="stat-card"><div class="stat-label">Expectancy</div><div class="stat-value ${expClass}">${o.expectancy.toFixed(1)}R</div><div class="stat-sub">Expected R per trade</div><div style="font-size:10px;color:var(--text3);margin-top:4px">Above 1.0R = profitable strategy over time</div></div>
+      <div class="stat-card"><div class="stat-label">Avg R:R (wins)</div><div class="stat-value amber">${o.avg_rr_wins ? '1:' + o.avg_rr_wins : '—'}</div><div class="stat-sub">On winning trades</div></div>
+      <div class="stat-card"><div class="stat-label">Current Streak</div><div class="stat-value" style="font-size:18px;line-height:1.3">${streakLabel}</div>${streakHint}<div class="stat-sub">Last ${streakAbs || 0} trades same result</div></div>
+      <div class="stat-card"><div class="stat-label">Total Logged</div><div class="stat-value blue">${total}</div><div class="stat-sub">Trades since tracking started</div></div>
+    </div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title">Win Rate Over Time</div>
+      ${monthChart}
+    </div>
+    <div class="two-col" style="margin-bottom:20px">
+      <div class="card">
+        <div class="card-title">Performance by Event</div>
+        <div class="table-wrap"><table>
+          <tr><th>Event</th><th>Count</th><th>Wins</th><th>Win Rate</th><th>Avg R:R</th></tr>
+          ${eventRows || '<tr><td colspan="5" class="empty-state">No event data</td></tr>'}
+        </table></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Performance by Entry Timing</div>
+        <div class="table-wrap"><table>
+          <tr><th>Timing</th><th>Count</th><th>Win Rate</th></tr>
+          ${timingRows || '<tr><td colspan="3" class="empty-state">No timing data</td></tr>'}
+        </table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title">Last 10 Trades — Recent Form</div>
+      <div class="perf-dots">${l10Dots}</div>
+      <div style="font-size:12px;color:var(--text2)"><span class="mono">${l10Wins}</span> wins and <span class="mono">${l10Losses}</span> losses in last 10 trades (<span class="mono">${l10Wr}%</span> win rate)</div>
+      <div class="perf-insight">${l10Insight}</div>
+    </div>
+    ${improvementHtml}
+    <div class="card">
+      <div class="card-title">Next Milestone</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">${ms.text}</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100, Math.round(ms.pct / ms.target * 100))}%;background:${msFill}"></div></div>
+      <div class="perf-insight" style="margin-top:12px">Each trade you log makes every future decision more data-driven.</div>
+    </div>`;
+}
+
+// ── THIS WEEK ─────────────────────────────────────────────
+function localDateStr(dt) {
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+async function renderThisWeek() {
+  const m = document.getElementById('main');
+  m.innerHTML = `<div class="page-header"><div class="page-title">This Week</div><div class="page-sub">Upcoming USD &amp; GBP news &middot; next 7 days</div></div><div class="empty-state">Loading upcoming events...</div>`;
+  const data = await GET('/upcoming');
+  const events = data.events || [];
+  const byDay = {};
+  events.forEach(ev => { (byDay[ev.event_date] = byDay[ev.event_date] || []).push(ev); });
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const sections = [];
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date();
+    dt.setDate(dt.getDate() + i);
+    const d = localDateStr(dt);
+    const label = `${dayNames[dt.getDay()]} · <span class="mono">${d}</span>`;
+    if (!byDay[d] || byDay[d].length === 0) {
+      sections.push(`<div class="day-header">${label}</div><div style="font-size:12px;color:var(--text3);padding:8px 0 12px">No tracked events today.</div>`);
+    } else {
+      const rows = byDay[d].map(ev => `
+        <div class="upcoming-row">
+          <span class="mono" style="color:var(--text2)">${ev.event_time || '—'}</span>
+          <div><div style="font-weight:600">${ev.your_name.replace(/ US$| UK$/,'')}</div>${countryBadge(ev.country)}</div>
+          <span><span class="badge ${ev.impact==='red'?'loss':'caution'}">${(ev.impact||'—').toUpperCase()}</span></span>
+          <span class="mono" style="font-size:11px">${ev.previous||'—'}</span>
+          <span class="mono" style="font-size:11px">${ev.forecast||'—'}</span>
+          <span></span><span></span>
+          <button class="btn btn-blue" style="padding:6px 12px;font-size:11px" onclick='showBrief(${JSON.stringify(ev.your_name)})'>Pre-Trade Brief</button>
+        </div>`).join('');
+      sections.push(`<div class="day-header">${label}</div>${rows}`);
+    }
+  }
+  const body = sections.length ? `<div class="card">${sections.join('')}</div>` : '<div class="card"><div class="empty-state">No tracked events in the next 7 days.</div></div>';
+  const sourceNote = data.source === 'database' ? ' · from synced data' : '';
+  m.innerHTML = `<div class="page-header"><div class="page-title">This Week</div><div class="page-sub">Upcoming USD &amp; GBP news &middot; next 7 days${data.cached?' · cached':''}${sourceNote}</div></div>${body}
+    <div style="margin-top:12px"><button class="btn btn-secondary" onclick="renderThisWeek()">↻ Refresh</button></div>`;
+}
+
+async function showBrief(eventName) {
+  stopLiveAssistant();
+  const existing = document.getElementById('brief-modal');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'brief-modal';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal-box brief-modal-box"><div class="empty-state">Loading brief...</div></div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) { stopLiveAssistant(); overlay.remove(); }
+  });
+  try {
+    const b = await GET('/brief/' + encodeURIComponent(eventName));
+    if (b.error) { overlay.querySelector('.modal-box').innerHTML = `<div style="color:var(--red)">${b.error}</div>`; return; }
+    overlay.querySelector('.modal-box').innerHTML = renderBriefModal(b);
+    initLiveAssistant(b);
+  } catch(e) {
+    overlay.querySelector('.modal-box').innerHTML = `<div style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+function closeBriefModal() {
+  stopLiveAssistant();
+  document.getElementById('brief-modal')?.remove();
+}
+
+function briefRatingBadge(type) {
+  const tclr = {Good:'win',Bad:'loss','Very Bad':'loss',Caution:'caution',Unreliable:'neutral'};
+  if (!type) return '';
+  return `<span class="badge ${tclr[type]||''}" style="margin-left:8px">${type.toUpperCase()}</span>`;
+}
+
+function briefConfidenceLabel(c, scenario) {
+  if (c == null) return 'Not enough historical data — wait and confirm direction manually.';
+  if (c >= 75) return 'STRONG SIGNAL — high confidence trade';
+  if (c >= 60) return 'MODERATE — confirm direction after release';
+  if (c >= 50) return 'WEAK — skip unless other signals align';
+  return `AVOID — direction is unpredictable on ${scenario}s`;
+}
+
+function briefDirBox(scenario, direction, consistency, count) {
+  const isBeat = scenario === 'beat';
+  const label = isBeat ? 'DATA BEATS FORECAST' : 'DATA MISSES FORECAST';
+  const borderColor = isBeat ? 'var(--green)' : 'var(--red)';
+  const bg = isBeat ? 'var(--green-dim)' : 'var(--red-dim)';
+  const op = isBeat ? '>' : '<';
+  let dirHtml = '<div style="font-size:16px;font-weight:600;color:var(--text3);margin:10px 0">Not enough data</div>';
+  if (direction === 'up') dirHtml = '<div style="font-size:24px;font-weight:700;color:var(--green);margin:10px 0">▲ BUY GBP/USD</div>';
+  else if (direction === 'down') dirHtml = '<div style="font-size:24px;font-weight:700;color:var(--red);margin:10px 0">▼ SELL GBP/USD</div>';
+  const confPct = consistency != null
+    ? `<span class="mono">${consistency}%</span> reliable based on <span class="mono">${count || 0}</span> past ${scenario}s`
+    : 'Not enough past data to score reliability';
+  return `<div style="padding:16px;border:1px solid ${borderColor};border-radius:10px;background:${bg}">
+    <div style="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--text2)">IF ACTUAL ${op} FORECAST</div>
+    <div style="font-size:11px;font-weight:600;margin-top:6px;color:${borderColor}">${label}</div>
+    ${dirHtml}
+    <div style="font-size:11px;color:var(--text2);margin-bottom:8px">${confPct}</div>
+    <div style="font-size:11px;color:var(--text2);line-height:1.5">${briefConfidenceLabel(consistency, scenario)}</div>
+  </div>`;
+}
+
+function renderBriefModal(b) {
+  const s = b.stats || {};
+  const n = s.total_occurrences || 0;
+  const avg5 = b.avg_pip_5m != null ? b.avg_pip_5m : 0;
+  const minP = b.min_pip_5m != null ? b.min_pip_5m : '—';
+  const maxP = b.max_pip_5m != null ? b.max_pip_5m : '—';
+  const fc = b.forecast || '—';
+  const sl = b.suggested_sl || 10;
+  const rr = b.suggested_rr || 5;
+  const tp = Math.round(sl * rr);
+  const hist = b.user_history || {};
+  const trades = b.past_trades || [];
+  const maxCons = Math.max(b.beat_consistency || 0, b.miss_consistency || 0);
+
+  const matchBox = `<div style="padding:16px;border:1px solid var(--amber);border-radius:10px;background:var(--amber-dim)">
+    <div style="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--text2)">IF ACTUAL = FORECAST</div>
+    <div style="font-size:11px;font-weight:600;margin-top:6px;color:var(--amber)">DATA MATCHES FORECAST</div>
+    <div style="font-size:24px;font-weight:700;color:var(--amber);margin:10px 0">⚠ NO CLEAR SIGNAL</div>
+    <div style="font-size:11px;color:var(--text2);line-height:1.5">When actual matches forecast, GBP/USD usually shows weak/mixed reaction. Best action: SKIP this release.</div>
+  </div>`;
+
+  const warnings = [];
+  if (avg5 < 10) warnings.push('⚠ LOW POWER WARNING: This event often doesn\'t move enough to hit a 1:5 target. Skip unless reaction is exceptional (15p+ in first 2 minutes).');
+  if (maxCons < 60 && maxCons > 0) warnings.push('⚠ UNPREDICTABLE DIRECTION: This event is hard to call. Consider skipping or use much smaller position size.');
+  if (b.rating_comment) warnings.push(`📌 Your own note: ${b.rating_comment}`);
+  if (b.same_day_events && b.same_day_events.length) {
+    const names = b.same_day_events.map(n => n.replace(/ US$| UK$/,'')).join(', ');
+    warnings.push(`⚠ ${b.same_day_events.length} other tracked event${b.same_day_events.length>1?'s':''} releasing same day: ${names}. Market may be choppy. Score the combo in News Scorer first.`);
+  }
+
+  let historyHtml = '';
+  if (!hist.count) {
+    historyHtml = '<div style="font-size:12px;color:var(--text2);line-height:1.6">You haven\'t traded this event before. Take this one slow. Use smaller position size than usual.</div>';
+  } else {
+    historyHtml = `<div style="font-size:12px;color:var(--text2);line-height:1.8;margin-bottom:12px">
+      <span class="mono">${hist.count}</span> trades logged &middot;
+      <span class="mono">${hist.win_rate}%</span> win rate
+      ${hist.avg_winning_rr != null ? ` &middot; avg winning R:R <span class="mono">1:${hist.avg_winning_rr}</span>` : ''}
+    </div>`;
+    historyHtml += trades.map(t => `<div class="past-match">
+      <span class="mono" style="font-size:10px;color:var(--text3)">${t.date}</span>
+      <span class="badge ${t.outcome==='Win'?'win':'loss'}">${t.outcome.toUpperCase()}</span>
+      ${t.ratio ? `<span class="mono" style="font-size:11px">1:${t.ratio}</span>` : ''}
+      <div style="font-size:11px;color:var(--text2);margin-top:4px">${t.improvement || 'No notes'}</div>
+    </div>`).join('');
+  }
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div>
+        <div class="modal-title">${b.event_name.replace(/ US$| UK$/,'')}</div>
+        <div style="margin-top:8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+          ${countryBadge(b.country)}
+          ${briefRatingBadge(b.rating_type)}
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text2)">
+          Release: <span class="mono">${b.release_time_london || '—'}</span> &middot;
+          <span class="mono">${b.release_time_utc || '—'}</span>
+          ${b.release_date ? ` &middot; <span class="mono">${b.release_date}</span>` : ''}
+        </div>
+        <div class="brief-forecast">FORECAST: ${fc}</div>
+      </div>
+      <button class="delete-btn" onclick="closeBriefModal()">✕</button>
+    </div>
+
+    <div class="brief-section live-assistant-wrap">
+      <div class="brief-section-title">Live Trade Assistant</div>
+      <div id="live-assistant-panel"></div>
+    </div>
+
+    <div class="brief-section">
+      <div class="brief-section-title">Decision Tree — What To Do When Data Releases</div>
+      <div class="brief-decision-grid">
+        ${briefDirBox('beat', b.beat_direction, b.beat_consistency, b.beat_count)}
+        ${matchBox}
+        ${briefDirBox('miss', b.miss_direction, b.miss_consistency, b.miss_count)}
+      </div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.7">
+        <strong>How to use this:</strong> When the news releases, compare the ACTUAL number against the FORECAST of <span class="mono">${fc}</span>.<br>
+        &bull; If actual is significantly higher than <span class="mono">${fc}</span> → use the BEATS box<br>
+        &bull; If actual is significantly lower than <span class="mono">${fc}</span> → use the MISSES box<br>
+        &bull; If actual is within 5% of <span class="mono">${fc}</span> → treat as MATCH and skip
+      </div>
+    </div>
+
+    <div class="brief-section">
+      <div class="brief-section-title">Magnitude Matters</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.8">
+        <strong>How big is the surprise?</strong> The bigger the gap between forecast and actual, the bigger the move usually is.<br><br>
+        &bull; Small surprise (less than 5% off forecast): Expect a small move, maybe <span class="mono">${(avg5 * 0.5).toFixed(1)}p</span><br>
+        &bull; Medium surprise (5–15% off forecast): Expect average move, ~<span class="mono">${avg5.toFixed(1)}p</span><br>
+        &bull; Large surprise (more than 15% off forecast): Expect bigger move, up to <span class="mono">${maxP}p</span>
+      </div>
+    </div>
+
+    <div class="brief-section">
+      <div class="brief-section-title">What The Data Says</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.8">
+        This event has released <span class="mono">${n}</span> times since Jan 2020.<br>
+        On average GBP/USD moves <span class="mono">${avg5.toFixed(1)}p</span> in the first 5 minutes after release.<br>
+        Biggest move ever recorded: <span class="mono">${maxP}p</span><br>
+        Smallest move recorded: <span class="mono">${minP}p</span><br><br>
+        <strong>Verdict: <span class="mono">${b.power_verdict || 'LOW-POWER'}</span> event.</strong>
+      </div>
+    </div>
+
+    <div class="brief-section">
+      <div class="brief-section-title">Your Trade Plan</div>
+      <div class="brief-step">✓ <strong>Step 1 — Watch the release</strong><br>Be on your chart 2–3 minutes before <span class="mono">${b.release_time_london || b.release_time}</span>. Don't enter anything yet.</div>
+      <div class="brief-step">✓ <strong>Step 2 — Read the actual number</strong><br>When ${b.event_name.replace(/ US$| UK$/,'')} releases, compare actual vs forecast of <span class="mono">${fc}</span>.</div>
+      <div class="brief-step">✓ <strong>Step 3 — Find your direction</strong><br>Use the boxes above to know BUY or SELL based on the actual.</div>
+      <div class="brief-step">✓ <strong>Step 4 — Wait 5 minutes</strong><br>Don't enter immediately. Wait 5 minutes for the initial spike to settle, then confirm the direction is still the same.</div>
+      <div class="brief-step">✓ <strong>Step 5 — Enter the trade</strong><br>
+        Entry: ${b.suggested_entry}<br>
+        Stop Loss: <span class="mono">${sl}p</span><br>
+        Take Profit: <span class="mono">${tp}p</span> (<span class="mono">1:${rr}</span> R:R)</div>
+      <div class="brief-step">✓ <strong>Step 6 — Don't move your SL</strong><br>Whatever happens, do not move your stop loss. If price hits it, accept the loss.</div>
+    </div>
+
+    ${warnings.length ? `<div class="brief-section"><div class="brief-section-title">Warnings</div>${warnings.map(w=>`<div class="brief-warning">${w}</div>`).join('')}</div>` : ''}
+
+    <div class="brief-section">
+      <div class="brief-section-title">Your History</div>
+      ${historyHtml}
+    </div>
+
+    <div style="margin-top:8px;display:flex;gap:10px">
+      <button class="btn btn-primary" onclick='pendingLogNews=${JSON.stringify(b.event_name)};closeBriefModal();nav("log")'>Log This Trade</button>
+      <button class="btn btn-secondary" onclick="closeBriefModal()">Close</button>
+    </div>`;
+}
+
+// ── LIVE TRADE ASSISTANT ──────────────────────────────────
+function stopLiveAssistant() {
+  if (!liveAssistantState) return;
+  if (liveAssistantState.priceTimer) clearInterval(liveAssistantState.priceTimer);
+  if (liveAssistantState.countdownTimer) clearInterval(liveAssistantState.countdownTimer);
+  liveAssistantState = null;
+}
+
+function parseBriefNumber(val) {
+  if (val == null || val === '' || val === '—') return null;
+  const s = String(val).replace(/%/g, '').replace(/,/g, '').trim();
+  const m = s.match(/^(-?[\d.]+)\s*([KkMm])?$/);
+  if (!m) return null;
+  let n = parseFloat(m[1]);
+  if (isNaN(n)) return null;
+  if (m[2] && m[2].toUpperCase() === 'K') n *= 1000;
+  if (m[2] && m[2].toUpperCase() === 'M') n *= 1000000;
+  return n;
+}
+
+function calcBeatMissLive(actualStr, forecastStr) {
+  const a = parseBriefNumber(actualStr);
+  const f = parseBriefNumber(forecastStr);
+  if (a === null || f === null) return { scenario: 'match', percentDiff: 0 };
+  const pct = Math.abs(f) > 0 ? Math.abs(a - f) / Math.abs(f) * 100 : 0;
+  if (pct <= 5) return { scenario: 'match', percentDiff: pct };
+  if (a > f) return { scenario: 'beat', percentDiff: pct };
+  return { scenario: 'miss', percentDiff: pct };
+}
+
+function getLiveRecommendation(brief, scenario) {
+  if (scenario === 'match') return { action: 'SKIP', dir: null, header: 'DATA MATCHED FORECAST', color: 'var(--amber)' };
+  if (scenario === 'beat') {
+    if (brief.beat_direction === 'up') return { action: 'BUY', dir: 'up', header: 'DATA BEAT FORECAST', color: 'var(--green)' };
+    if (brief.beat_direction === 'down') return { action: 'SELL', dir: 'down', header: 'DATA BEAT FORECAST', color: 'var(--green)' };
+    return { action: 'SKIP', dir: null, header: 'DATA BEAT FORECAST', color: 'var(--green)' };
+  }
+  if (brief.miss_direction === 'up') return { action: 'BUY', dir: 'up', header: 'DATA MISSED FORECAST', color: 'var(--red)' };
+  if (brief.miss_direction === 'down') return { action: 'SELL', dir: 'down', header: 'DATA MISSED FORECAST', color: 'var(--red)' };
+  return { action: 'SKIP', dir: null, header: 'DATA MISSED FORECAST', color: 'var(--red)' };
+}
+
+function livePips(from, to) {
+  if (from == null || to == null) return 0;
+  return Math.round((to - from) * 10000 * 10) / 10;
+}
+
+function formatCountdown(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function initLiveAssistant(brief) {
+  liveAssistantState = { brief, stage: 'before' };
+  renderLiveBefore();
+}
+
+function renderLiveBefore() {
+  const el = document.getElementById('live-assistant-panel');
+  if (!el) return;
+  el.innerHTML = `
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">News hasn't released yet? Come back when you have the actual number.</div>
+    <label style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px">Actual Number (enter when news releases)</label>
+    <div style="display:flex;gap:10px;margin-top:8px;align-items:center">
+      <input type="text" id="live-actual-input" placeholder="e.g. 54.2, 172K, 3.8%" style="flex:1">
+      <button class="btn btn-primary" id="live-start-btn">Start Live Mode</button>
+    </div>
+    <div id="live-before-error" style="font-size:11px;color:var(--red);margin-top:8px"></div>`;
+  document.getElementById('live-start-btn').onclick = startLiveMode;
+}
+
+async function startLiveMode() {
+  const errEl = document.getElementById('live-before-error');
+  const actual = document.getElementById('live-actual-input')?.value.trim();
+  if (!actual) {
+    if (errEl) errEl.textContent = 'Enter the actual number released.';
+    return;
+  }
+  const b = liveAssistantState.brief;
+  const forecast = b.forecast;
+  if (parseBriefNumber(actual) === null || parseBriefNumber(forecast) === null) {
+    if (errEl) errEl.textContent = 'Could not parse actual or forecast. Enter a plain number (e.g. 54.2).';
+    return;
+  }
+  let openPrice;
+  try {
+    const p = await GET('/oanda/current-price');
+    openPrice = p.price;
+  } catch(e) {
+    if (errEl) errEl.textContent = 'Could not fetch OANDA price — connect in Settings.';
+    return;
+  }
+  const { scenario, percentDiff } = calcBeatMissLive(actual, forecast);
+  const rec = getLiveRecommendation(b, scenario);
+  liveAssistantState = {
+    brief: b, stage: 'A', actual, openPrice, currentPrice: openPrice,
+    scenario, percentDiff, rec, countdownSecs: 300, entryPrice: null,
+    priceTimer: null, countdownTimer: null,
+  };
+  renderLiveStageA();
+  if (rec.action !== 'SKIP') startLiveCountdown();
+  else renderLiveSkipWait();
+}
+
+function renderLiveStageA() {
+  const la = liveAssistantState;
+  const b = la.brief;
+  const el = document.getElementById('live-assistant-panel');
+  if (!el || !la) return;
+  const avg5 = b.avg_pip_5m || 0;
+  const maxP = b.max_pip_5m || 0;
+  let moveExpect = `Expect small move, ~<span class="mono">${(avg5 * 0.5).toFixed(1)}p</span>`;
+  if (la.percentDiff > 15) moveExpect = `Expect bigger move, up to <span class="mono">${maxP}p</span>`;
+  else if (la.percentDiff >= 5) moveExpect = `Expect average move, ~<span class="mono">${avg5.toFixed(1)}p</span>`;
+  const conf = la.scenario === 'beat' ? b.beat_consistency : la.scenario === 'miss' ? b.miss_consistency : null;
+  const count = la.scenario === 'beat' ? b.beat_count : la.scenario === 'miss' ? b.miss_count : 0;
+  let dirHtml = '<div class="live-verdict-skip">⚠ SKIP — no clear signal on match scenarios</div>';
+  if (la.rec.action === 'BUY') dirHtml = '<div class="live-verdict-buy">▲ BUY GBP/USD</div>';
+  if (la.rec.action === 'SELL') dirHtml = '<div class="live-verdict-sell">▼ SELL GBP/USD</div>';
+  el.innerHTML = `
+    <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:${la.rec.color}">${la.rec.header}</div>
+    <div style="padding:14px;border:1px solid ${la.rec.color};border-radius:8px;background:var(--surface);margin-top:10px">
+      ${dirHtml}
+      <div style="font-size:12px;color:var(--text2);margin-top:8px">
+        Confidence: <span class="mono">${conf != null ? conf + '%' : '—'}</span> reliable based on <span class="mono">${count || 0}</span> past occurrences<br>
+        Surprise size: <span class="mono">${la.percentDiff.toFixed(1)}%</span> off forecast<br>
+        ${moveExpect}
+      </div>
+    </div>
+    <div id="live-stage-b-container"></div>`;
+}
+
+function renderLiveSkipWait() {
+  const el = document.getElementById('live-stage-b-container');
+  if (!el) return;
+  el.innerHTML = `<div class="live-stage-box live-stage-warn" style="margin-top:16px">
+    <strong>No trade recommended.</strong> Actual matched forecast — skip this release per your rules.
+    <div style="margin-top:12px"><button class="btn btn-secondary" onclick="cancelLiveMode()">Reset</button></div>
+  </div>`;
+}
+
+function startLiveCountdown() {
+  const la = liveAssistantState;
+  la.stage = 'B';
+  renderLiveStageB();
+  la.priceTimer = setInterval(pollLivePrice, 15000);
+  la.countdownTimer = setInterval(() => {
+    la.countdownSecs -= 1;
+    const timerEl = document.getElementById('live-countdown');
+    if (timerEl) timerEl.textContent = `WAIT: ${formatCountdown(la.countdownSecs)}`;
+    updateLiveWaitStatus();
+    if (la.countdownSecs <= 0) {
+      clearInterval(la.countdownTimer);
+      la.countdownTimer = null;
+      renderLiveStageC();
+    }
+  }, 1000);
+}
+
+async function pollLivePrice() {
+  if (!liveAssistantState) return;
+  try {
+    const p = await GET('/oanda/current-price');
+    liveAssistantState.currentPrice = p.price;
+    updateLivePriceDisplay();
+    if (liveAssistantState.stage === 'D') updateLiveTracking();
+    if (liveAssistantState.stage === 'B') updateLiveWaitStatus();
+  } catch(e) { /* keep last price */ }
+}
+
+function updateLivePriceDisplay() {
+  const la = liveAssistantState;
+  if (!la) return;
+  const cur = document.getElementById('live-current-price');
+  const pips = document.getElementById('live-pips-moved');
+  const dir = document.getElementById('live-price-dir');
+  if (cur) cur.textContent = la.currentPrice?.toFixed(5) ?? '—';
+  const pipVal = livePips(la.openPrice, la.currentPrice);
+  if (pips) pips.textContent = (pipVal >= 0 ? '+' : '') + pipVal + 'p';
+  if (dir) dir.innerHTML = pipVal > 0.5 ? '<span class="dir-up">▲</span>' : pipVal < -0.5 ? '<span class="dir-down">▼</span>' : '—';
+}
+
+function getLiveWaitStatus() {
+  const la = liveAssistantState;
+  const pipVal = livePips(la.openPrice, la.currentPrice);
+  const absPip = Math.abs(pipVal);
+  if (absPip < 3) return '⊘ Weak reaction. Consider skipping if it stays flat.';
+  const movingUp = pipVal > 0;
+  const expectedUp = la.rec.dir === 'up';
+  if (movingUp === expectedUp) return '✓ Price moving as expected. Stay patient.';
+  return '⚠ Price moving opposite to expectation. Be cautious — may be a fakeout.';
+}
+
+function updateLiveWaitStatus() {
+  const el = document.getElementById('live-wait-status');
+  if (el) el.textContent = getLiveWaitStatus();
+  updateLivePriceDisplay();
+}
+
+function renderLiveStageB() {
+  const la = liveAssistantState;
+  const el = document.getElementById('live-stage-b-container');
+  if (!el) return;
+  el.innerHTML = `
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <div class="live-timer" id="live-countdown">WAIT: ${formatCountdown(la.countdownSecs)}</div>
+      <div style="font-size:12px;color:var(--text2);line-height:2">
+        Open price: <span class="mono" id="live-open-price">${la.openPrice.toFixed(5)}</span><br>
+        Current price: <span class="mono" id="live-current-price">${la.currentPrice.toFixed(5)}</span><br>
+        Pips moved: <span class="mono" id="live-pips-moved">${livePips(la.openPrice, la.currentPrice)}p</span>
+        Direction: <span id="live-price-dir">—</span>
+      </div>
+      <div id="live-wait-status" style="font-size:12px;color:var(--text2);margin:12px 0">${getLiveWaitStatus()}</div>
+      <button class="btn btn-danger" onclick="cancelLiveMode()">Cancel — Don't Trade</button>
+    </div>`;
+  pollLivePrice();
+}
+
+function cancelLiveMode() {
+  const b = liveAssistantState?.brief;
+  stopLiveAssistant();
+  if (b) initLiveAssistant(b);
+}
+
+function renderLiveStageC() {
+  const la = liveAssistantState;
+  la.stage = 'C';
+  const el = document.getElementById('live-stage-b-container');
+  if (!el) return;
+  pollLivePrice();
+  const pipVal = livePips(la.openPrice, la.currentPrice);
+  const absPip = Math.abs(pipVal);
+  const movingUp = pipVal > 0;
+  const confirmed = la.rec.action === 'BUY' ? pipVal > 0 : la.rec.action === 'SELL' ? pipVal < 0 : false;
+  const sl = la.brief.suggested_sl || 10;
+  const rr = la.brief.suggested_rr || 5;
+  const tpPips = sl * rr;
+  const entry = la.currentPrice;
+  const pipSize = 0.0001;
+  let html = '';
+  if (la.rec.action === 'SKIP') {
+    html = `<div class="live-stage-box live-stage-no">
+      <strong>⚠ SKIP — no clear signal</strong><br><br>Do not trade this release.
+      <div style="margin-top:14px"><button class="btn btn-secondary" onclick="cancelLiveMode()">Close</button></div></div>`;
+  } else if (absPip < 5) {
+    html = `<div class="live-stage-box live-stage-warn">
+      <strong>⊘ WEAK REACTION — CONSIDER SKIPPING</strong><br><br>
+      Only <span class="mono">${absPip.toFixed(1)}</span> pips of movement in 5 minutes. This event likely won't reach your target.
+      You can still enter but expect a small move.
+      <div style="margin-top:14px;display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="confirmLiveEntry()">Enter Anyway</button>
+        <button class="btn btn-secondary" onclick="cancelLiveMode()">Skip</button>
+      </div></div>`;
+  } else if (confirmed) {
+    const slPrice = la.rec.action === 'BUY' ? entry - sl * pipSize : entry + sl * pipSize;
+    const tpPrice = la.rec.action === 'BUY' ? entry + tpPips * pipSize : entry - tpPips * pipSize;
+    html = `<div class="live-stage-box live-stage-go">
+      <strong>✓ DIRECTION CONFIRMED — READY TO ENTER</strong><br><br>
+      Action: <strong>${la.rec.action} GBP/USD</strong><br>
+      Entry price: <span class="mono">${entry.toFixed(5)}</span><br>
+      Stop Loss: <span class="mono">${slPrice.toFixed(5)}</span> (<span class="mono">${sl}p</span>)<br>
+      Take Profit: <span class="mono">${tpPrice.toFixed(5)}</span> (<span class="mono">${tpPips}p</span>)<br><br>
+      Risk reminder: Only risk 1–2% of your account on this trade.
+      <div style="margin-top:14px;display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="confirmLiveEntry()">I've Entered the Trade</button>
+        <button class="btn btn-secondary" onclick="cancelLiveMode()">Cancel</button>
+      </div></div>`;
+    la.plannedSl = slPrice;
+    la.plannedTp = tpPrice;
+  } else {
+    html = `<div class="live-stage-box live-stage-no">
+      <strong>⚠ DIRECTION CHANGED — DO NOT TRADE</strong><br><br>
+      Price moved opposite to expectation during the 5-min wait. This is a sign of fakeout or unreliable reaction. SKIP this trade.
+      <div style="margin-top:14px"><button class="btn btn-secondary" onclick="cancelLiveMode()">Close</button></div></div>`;
+  }
+  el.innerHTML = html;
+}
+
+function confirmLiveEntry() {
+  const la = liveAssistantState;
+  la.stage = 'D';
+  la.entryPrice = la.currentPrice;
+  const sl = la.brief.suggested_sl || 10;
+  const rr = la.brief.suggested_rr || 5;
+  const tpPips = sl * rr;
+  const pipSize = 0.0001;
+  const entry = la.entryPrice;
+  if (!la.plannedSl) {
+    la.plannedSl = la.rec.action === 'BUY' ? entry - sl * pipSize : entry + sl * pipSize;
+    la.plannedTp = la.rec.action === 'BUY' ? entry + tpPips * pipSize : entry - tpPips * pipSize;
+  }
+  if (la.countdownTimer) { clearInterval(la.countdownTimer); la.countdownTimer = null; }
+  if (!la.priceTimer) la.priceTimer = setInterval(pollLivePrice, 15000);
+  renderLiveStageD();
+  pollLivePrice();
+}
+
+function renderLiveStageD() {
+  const la = liveAssistantState;
+  const el = document.getElementById('live-stage-b-container');
+  if (!el) return;
+  el.innerHTML = `
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">POST-ENTRY TRACKING</div>
+      <div id="live-tracking-body" style="font-size:12px;color:var(--text2);line-height:2"></div>
+      <div class="live-progress"><div class="live-progress-marker" id="live-progress-marker" style="left:50%"></div></div>
+      <div id="live-tracking-status" style="font-size:12px;margin:12px 0"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="logLiveTrade('Win')">Trade Closed — Win</button>
+        <button class="btn btn-danger" onclick="logLiveTrade('Loss')">Trade Closed — Loss</button>
+      </div>
+    </div>`;
+  updateLiveTracking();
+}
+
+function updateLiveTracking() {
+  const la = liveAssistantState;
+  if (!la || la.stage !== 'D') return;
+  const entry = la.entryPrice;
+  const cur = la.currentPrice;
+  const isBuy = la.rec.action === 'BUY';
+  const pnlPips = isBuy ? livePips(entry, cur) : livePips(cur, entry);
+  const body = document.getElementById('live-tracking-body');
+  const status = document.getElementById('live-tracking-status');
+  const marker = document.getElementById('live-progress-marker');
+  if (body) {
+    body.innerHTML = `
+      Entry price: <span class="mono">${entry.toFixed(5)}</span> (locked)<br>
+      Current price: <span class="mono">${cur.toFixed(5)}</span><br>
+      Pips in profit/loss: <span class="mono" style="color:${pnlPips>=0?'var(--green)':'var(--red)'}">${pnlPips>=0?'+':''}${pnlPips}p</span><br>
+      Stop Loss: <span class="mono">${la.plannedSl.toFixed(5)}</span><br>
+      Take Profit: <span class="mono">${la.plannedTp.toFixed(5)}</span>`;
+  }
+  if (marker && la.plannedSl && la.plannedTp) {
+    const range = la.plannedTp - la.plannedSl;
+    const pos = range !== 0 ? ((cur - la.plannedSl) / range) * 100 : 50;
+    marker.style.left = Math.max(0, Math.min(100, pos)) + '%';
+  }
+  if (status) {
+    let msg = pnlPips > 0
+      ? `✓ In profit: <span class="mono">${pnlPips}p</span>`
+      : pnlPips < 0
+        ? `⚠ In loss: <span class="mono">${Math.abs(pnlPips)}p</span> — stay disciplined, don't move your SL`
+        : 'At entry — hold your plan';
+    if (isBuy && cur >= la.plannedTp) msg = '<div class="live-stage-box live-stage-go">🎯 TAKE PROFIT HIT — Close your trade and log it!</div>';
+    else if (!isBuy && cur <= la.plannedTp) msg = '<div class="live-stage-box live-stage-go">🎯 TAKE PROFIT HIT — Close your trade and log it!</div>';
+    else if (isBuy && cur <= la.plannedSl) msg = '<div class="live-stage-box live-stage-no">🛑 STOP LOSS HIT — Close your trade and log it. The plan worked, accept the loss.</div>';
+    else if (!isBuy && cur >= la.plannedSl) msg = '<div class="live-stage-box live-stage-no">🛑 STOP LOSS HIT — Close your trade and log it. The plan worked, accept the loss.</div>';
+    status.innerHTML = msg;
+  }
+}
+
+function logLiveTrade(outcome) {
+  const la = liveAssistantState;
+  if (!la) return;
+  pendingLogNews = la.brief.event_name;
+  pendingLogPrefill = {
+    outcome,
+    entry: '5 min after checking reaction',
+    ratio: la.brief.suggested_rr,
+    sl: la.brief.suggested_sl,
+    actual: la.actual,
+    forecast: la.brief.forecast,
+  };
+  closeBriefModal();
+  nav('log');
+}
+
+// ── ANALYSIS ──────────────────────────────────────────────
+async function renderAnalysis() {
+  const [data, syncStatus, journalData] = await Promise.all([
+    GET('/analysis'), GET('/sync/status'), GET('/journal')
+  ]);
+  journalDataCache = journalData.events || [];
+  const m = document.getElementById('main');
+  const isSyncing = syncStatus.running;
+  const lastSync = syncStatus.last_sync;
+  const lastSyncLabel = lastSync ? `${lastSync.finished_at || lastSync.started_at} · ${lastSync.status}${lastSync.events_found != null ? ` · ${lastSync.events_found} events` : ''}` : '';
+  const syncBar = isSyncing
+    ? `<div class="sync-progress"><div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;color:var(--amber)">⟳ Syncing... ${syncStatus.message||''}</span>
+        <span class="mono" style="font-size:11px;color:var(--text3)">${syncStatus.progress||0}%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${syncStatus.progress||0}%"></div></div></div>`
+    : `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px"><div>
+        <div style="font-size:13px;color:var(--text2)">${data.total_events > 0 ? `${data.total_events} events analysed · ${data.total_reactions} price reactions` : 'No data yet. Run your first sync to pull historical news from Forex Factory.'}</div>
+        ${lastSyncLabel ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Last sync: ${lastSyncLabel}</div>` : ''}
+        ${syncStatus.stage === 'done' && syncStatus.message ? `<div style="font-size:11px;color:var(--green);margin-top:4px">${syncStatus.message}</div>` : ''}
+        ${syncStatus.stage === 'error' ? `<div style="font-size:11px;color:var(--red);margin-top:4px">${syncStatus.message}</div>` : ''}
+      </div><div style="display:flex;gap:10px">
+        <button class="btn btn-blue" onclick="startSync()">⟳ Sync Now</button>
+        <button class="btn btn-secondary" onclick="renderAnalysis()">↻ Refresh</button>
+      </div></div>`;
+
+  let filtered = applyRowFilters(journalDataCache);
+  let summary = aggregateAnalysis(filtered);
+  if (filterState.tradeableOnly) summary = summary.filter(e => e.tradeable);
+
+  if (summary.length === 0) {
+    const emptyCta = isSyncing ? `<div style="margin-top:16px;font-size:13px;color:var(--amber)">Please wait — syncing data...</div>` : `<div style="margin-top:16px"><button class="btn btn-primary" onclick="startSync()">⟳ Start First Sync</button></div>`;
+    m.innerHTML = `<div class="page-header"><div class="page-title">Analysis</div><div class="page-sub">Historical news performance · Jan 2020 to today</div></div>
+      ${syncBar}${renderFilterBar('renderAnalysis')}
+      <div class="card"><div class="empty-state"><div style="font-size:36px;margin-bottom:12px">📡</div>
+        <div style="font-weight:600;margin-bottom:8px">No analysis data for this filter</div>
+        <div>Adjust filters or run a sync to pull USD &amp; GBP news from Forex Factory.</div>${emptyCta}</div></div>`;
+    if (isSyncing) syncPollTimer = setTimeout(() => renderAnalysis(), 3000);
+    return;
+  }
+
+  const rows = summary.map(ev => `<tr class="event-detail-row" onclick='showEventDetail(${JSON.stringify(ev.your_name)})'>
+    <td><div style="font-size:12px;font-weight:600">${ev.your_name.replace(/ US$| UK$/,'')}</div><div style="margin-top:3px">${countryBadge(ev.country)}</div></td>
+    <td><span class="badge ${ev.impact==='red'?'loss':'caution'}">${(ev.impact||'—').toUpperCase()}</span></td>
+    <td class="mono" style="font-size:12px">${ev.total_occurrences}</td>
+    <td><span class="pip-pill ${pipClass(ev.avg_pip_5m)}">${pipLabel(ev.avg_pip_5m)}</span></td>
+    <td><span class="pip-pill ${pipClass(ev.avg_pip_15m)}">${pipLabel(ev.avg_pip_15m)}</span></td>
+    <td><span class="pip-pill ${pipClass(ev.avg_pip_30m)}">${pipLabel(ev.avg_pip_30m)}</span></td>
+    <td>${ev.beat_direction ? `${dirIcon(ev.beat_direction)} <span style="font-size:11px;color:var(--text2)">${ev.beat_consistency}%</span>` : '—'}</td>
+    <td>${ev.miss_direction ? `${dirIcon(ev.miss_direction)} <span style="font-size:11px;color:var(--text2)">${ev.miss_consistency}%</span>` : '—'}</td>
+    <td><span class="tradeable-badge ${ev.tradeable?'tradeable-yes':'tradeable-no'}">${ev.tradeable?'✓ YES':'✗ NO'}</span></td>
+    <td style="font-size:11px;color:var(--text2);max-width:180px">${whatThisMeans(ev)}</td>
+  </tr>`).join('');
+
+  m.innerHTML = `<div class="page-header"><div class="page-title">Analysis</div><div class="page-sub">Historical news performance · Jan 2020 to today · Click any row for full history</div></div>
+    ${syncBar}${renderFilterBar('renderAnalysis')}
+    <div class="three-col" style="margin-bottom:24px">
+      <div class="stat-card"><div class="stat-label">Events (filtered)</div><div class="stat-value blue">${filtered.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Event Types</div><div class="stat-value blue">${summary.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Tradeable</div><div class="stat-value green">${summary.filter(e=>e.tradeable).length}</div></div>
+    </div>
+    <div class="card"><div class="card-title">News Event Performance · Sorted by 5M Pip Move</div>
+      <div class="table-wrap"><table><tr><th>Event</th><th>Impact</th><th>Count</th><th>Avg 5M</th><th>Avg 15M</th><th>Avg 30M</th><th>Beat → Dir</th><th>Miss → Dir</th><th>Tradeable</th><th>What This Means</th></tr>${rows}</table></div>
+    </div><div id="event-detail" style="margin-top:20px"></div>`;
+  if (isSyncing) syncPollTimer = setTimeout(() => renderAnalysis(), 3000);
+}
+
+async function startSync() {
+  try {
+    await POST('/sync', {});
+    toast('Sync started — this will take a few minutes', 'success');
+    renderAnalysis();
+    syncPollTimer = setTimeout(() => renderAnalysis(), 3000);
+  } catch(e) {
+    toast('Failed to start sync: ' + e.message, 'error');
+  }
+}
+
+async function startFullSync() {
+  if (!confirm('Full resync from Jan 2020 will take 20-30 minutes. Continue?')) return;
+  try {
+    await POST('/sync/full', {});
+    toast('Full resync started — leave the app running', 'success');
+    nav('analysis');
+  } catch(e) {
+    toast('Failed: ' + e.message, 'error');
+  }
+}
+
+async function showEventDetail(eventName) {
+  const el = document.getElementById('event-detail');
+  if (!el) return;
+  el.innerHTML = '<div class="empty-state">Loading history...</div>';
+  const data = await GET('/analysis/' + encodeURIComponent(eventName));
+  const history = data.history || [];
+
+  const dirIcon = d => d==='up'?'<span class="dir-up">▲</span>':d==='down'?'<span class="dir-down">▼</span>':'—';
+  const pipLabel = v => v != null ? v.toFixed(1)+'p' : '—';
+  const bmBadge = bm => {
+    if (bm==='beat') return '<span class="badge win">BEAT</span>';
+    if (bm==='miss') return '<span class="badge loss">MISS</span>';
+    if (bm==='inline') return '<span class="badge neutral">INLINE</span>';
+    return '<span class="badge neutral">—</span>';
+  };
+
+  el.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:0">${eventName} — Full History</div>
+        <button class="delete-btn" onclick="document.getElementById('event-detail').innerHTML=''">✕ Close</button>
+      </div>
+      ${history.length === 0 ? '<div class="empty-state">No history found</div>' : `
+      <div class="table-wrap"><table>
+        <tr><th>Date</th><th>Time</th><th>Prev</th><th>Forecast</th><th>Actual</th><th>Beat/Miss</th><th>Dir 5M</th><th>Pips 5M</th><th>Pips 15M</th><th>Pips 30M</th><th>Pips 60M</th></tr>
+        ${history.map(h=>`<tr>
+          <td class="mono" style="font-size:11px">${h.event_date}</td>
+          <td class="mono" style="font-size:11px;color:var(--text3)">${h.event_time||'—'}</td>
+          <td class="mono" style="font-size:11px">${h.previous||'—'}</td>
+          <td class="mono" style="font-size:11px">${h.forecast||'—'}</td>
+          <td class="mono" style="font-size:11px;font-weight:700">${h.actual||'—'}</td>
+          <td>${bmBadge(h.beat_miss)}</td>
+          <td>${dirIcon(h.direction_5m)}</td>
+          <td><span class="mono" style="font-size:11px">${pipLabel(h.pip_5m)}</span></td>
+          <td><span class="mono" style="font-size:11px">${pipLabel(h.pip_15m)}</span></td>
+          <td><span class="mono" style="font-size:11px">${pipLabel(h.pip_30m)}</span></td>
+          <td><span class="mono" style="font-size:11px">${pipLabel(h.pip_60m)}</span></td>
+        </tr>`).join('')}
+      </table></div>`}
+    </div>`;
+}
+
+// ── SCORER ────────────────────────────────────────────────
+async function renderScorer() {
+  ratings = await GET('/ratings');
+  const opts = '<option value="">— Select news —</option>' + ratings.map(r=>`<option value="${r.name}">${r.name}</option>`).join('');
+  const fwRow = (id1,id2) => `<div class="form-grid" style="margin-top:8px">
+    <div class="form-group"><label>Forecast</label><input type="text" id="${id1}" placeholder="e.g. 85" oninput="runScore()"></div>
+    <div class="form-group"><label>Actual</label><input type="text" id="${id2}" placeholder="e.g. 172" oninput="runScore()"></div></div>`;
+  document.getElementById('main').innerHTML = `
+    <div class="page-header"><div class="page-title">News Scorer</div><div class="page-sub">Enter up to 3 news events to get a trade signal</div></div>
+    <div class="two-col">
+      <div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-title">News Events</div>
+          <div class="form-group" style="margin-bottom:14px"><label>News Event 1</label><select id="sc1" onchange="runScore()">${opts}</select>${fwRow('sf1','sa1')}</div>
+          <div class="form-group" style="margin-bottom:14px"><label>News Event 2 (optional)</label><select id="sc2" onchange="runScore()">${opts}</select>${fwRow('sf2','sa2')}</div>
+          <div class="form-group"><label>News Event 3 (optional)</label><select id="sc3" onchange="runScore()">${opts}</select>${fwRow('sf3','sa3')}</div>
+        </div>
+        <div id="sig-out"><div class="signal-box neutral"><div class="signal-icon">⏳</div><div><div class="signal-label" style="color:var(--text2)">WAITING</div><div class="signal-reasoning">Select at least one news event.</div></div></div></div>
+      </div>
+      <div class="card"><div class="card-title">Past Trades — Same News</div><div id="past-out"><div class="empty-state">Select a news event to see past trades.</div></div></div>
+    </div>`;
+}
+
+async function runScore() {
+  const v = id => document.getElementById(id)?.value||'';
+  const events = [{key:v('sc1'),forecast:v('sf1'),actual:v('sa1')},{key:v('sc2'),forecast:v('sf2'),actual:v('sa2')},{key:v('sc3'),forecast:v('sf3'),actual:v('sa3')}].filter(e=>e.key);
+  try {
+    const res = await POST('/score', {events});
+    const ico={go:'🟢','no-trade':'🔴',caution:'⚠️',neutral:'⏳'};
+    const lbl={go:'GO — TAKE THE TRADE','no-trade':'NO TRADE',caution:'CAUTION — CHECK FIRST',neutral:'WAITING'};
+    document.getElementById('sig-out').innerHTML=`<div class="signal-box ${res.signal}"><div class="signal-icon">${ico[res.signal]}</div><div><div class="signal-label">${lbl[res.signal]}</div><ul class="signal-reasoning">${res.reasons.map(r=>`<li>${r}</li>`).join('')}${res.entry?`<li style="margin-top:8px;color:var(--text);font-weight:600">${res.entry}</li>`:''}</ul></div></div>`;
+    const matches=res.past_matches||[];
+    document.getElementById('past-out').innerHTML=matches.length?matches.map(t=>`<div class="past-match"><div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">${t.date} &middot; Entry: ${t.entry||'—'} &middot; R:R 1:${t.ratio||'—'}</div><div style="margin-bottom:4px">${[t.news1,t.news2,t.news3].filter(Boolean).map(n=>`<span class="news-tag">${n}</span>`).join('')}</div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:6px">${t.improvement||'No notes'}</div><span class="badge ${t.outcome==='Win'?'win':'loss'}">${t.outcome.toUpperCase()}</span></div>`).join(''):'<div class="empty-state">No past trades with this news.</div>';
+  } catch(e) { console.error(e); }
+}
+
+// ── LOG TRADE ─────────────────────────────────────────────
+async function renderLog() {
+  ratings = await GET('/ratings');
+  const pre = pendingLogPrefill;
+  const opts = '<option value="">— Select news —</option>' + ratings.map(r=>`<option value="${r.name}" ${pendingLogNews===r.name?'selected':''}>${r.name}</option>`).join('');
+  pendingLogNews = '';
+  pendingLogPrefill = null;
+  document.getElementById('main').innerHTML = `
+    <div class="page-header"><div class="page-title">Log Trade</div><div class="page-sub">Record a new GBP/USD news trade</div></div>
+    <div class="card">
+      <div class="card-title">Trade Details</div>
+      <div class="form-grid" style="margin-bottom:16px">
+        <div class="form-group"><label>Date</label><input type="date" id="lg-date" value="${new Date().toISOString().split('T')[0]}"></div>
+        <div class="form-group"><label>Outcome</label><select id="lg-out"><option value="Win">Win</option><option value="Loss">Loss</option></select></div>
+      </div>
+      <div class="divider"></div>
+      <div class="card-title">News Events</div>
+      <div class="form-group" style="margin-bottom:12px"><label>News Event 1</label><select id="lg-n1">${opts}</select></div>
+      <div class="form-group" style="margin-bottom:12px"><label>News Event 2 (optional)</label><select id="lg-n2">${opts}</select></div>
+      <div class="form-group" style="margin-bottom:16px"><label>News Event 3 (optional)</label><select id="lg-n3">${opts}</select></div>
+      <div class="divider"></div>
+      <div class="card-title">Fundamentals (optional)</div>
+      <div class="form-grid-3" style="margin-bottom:16px">
+        <div class="form-group"><label>Previous</label><input type="text" id="lg-pv" placeholder="e.g. 179"></div>
+        <div class="form-group"><label>Forecast</label><input type="text" id="lg-fc" placeholder="e.g. 85"></div>
+        <div class="form-group"><label>Actual</label><input type="text" id="lg-ac" placeholder="e.g. 172"></div>
+      </div>
+      <div class="divider"></div>
+      <div class="card-title">Trade Mechanics</div>
+      <div class="form-grid-3" style="margin-bottom:16px">
+        <div class="form-group"><label>Entry Timing</label><input type="text" id="lg-en" placeholder="e.g. 5 min after checking reaction"></div>
+        <div class="form-group"><label>R:R Ratio (1:X)</label><input type="number" id="lg-rr" placeholder="e.g. 5" min="0" step="0.5"></div>
+        <div class="form-group"><label>SL (pips)</label><input type="number" id="lg-sl" placeholder="e.g. 10" min="0"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:20px"><label>Notes / Improvement</label><textarea id="lg-imp" placeholder="What happened? What would you do differently?"></textarea></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" onclick="saveTrade()">Save Trade</button>
+        <button class="btn btn-secondary" onclick="clearLog()">Clear</button>
+      </div>
+    </div>`;
+  if (pre) {
+    if (pre.outcome) { const o = document.getElementById('lg-out'); if (o) o.value = pre.outcome; }
+    if (pre.entry) { const e = document.getElementById('lg-en'); if (e) e.value = pre.entry; }
+    if (pre.ratio != null) { const r = document.getElementById('lg-rr'); if (r) r.value = pre.ratio; }
+    if (pre.sl != null) { const s = document.getElementById('lg-sl'); if (s) s.value = pre.sl; }
+    if (pre.forecast) { const f = document.getElementById('lg-fc'); if (f) f.value = pre.forecast; }
+    if (pre.actual) { const a = document.getElementById('lg-ac'); if (a) a.value = pre.actual; }
+  }
+}
+
+async function saveTrade() {
+  const g = id => document.getElementById(id)?.value||'';
+  const date=g('lg-date'), n1=g('lg-n1');
+  if (!date||!n1) { toast('Date and at least one news event required','error'); return; }
+  try {
+    await POST('/trades',{date,news1:n1,news2:g('lg-n2'),news3:g('lg-n3'),previous:g('lg-pv'),forecast:g('lg-fc'),actual:g('lg-ac'),entry:g('lg-en'),ratio:parseFloat(g('lg-rr'))||null,sl:parseFloat(g('lg-sl'))||null,outcome:g('lg-out'),improvement:g('lg-imp')});
+    toast('Trade saved','success'); nav('journal'); journalTab='trades';
+  } catch(e) { toast('Failed: '+e.message,'error'); }
+}
+
+function clearLog() {
+  ['lg-n1','lg-n2','lg-n3','lg-pv','lg-fc','lg-ac','lg-en','lg-rr','lg-sl','lg-imp'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const d=document.getElementById('lg-date');if(d)d.value=new Date().toISOString().split('T')[0];
+}
+
+// ── JOURNAL ───────────────────────────────────────────────
+async function renderJournal() {
+  const m = document.getElementById('main');
+  m.innerHTML = `<div class="page-header"><div class="page-title">Journal</div><div class="page-sub">All news events &amp; your trades</div></div>
+    <div class="tab-bar">
+      <button class="tab-btn ${journalTab==='events'?'active':''}" onclick="journalTab='events';renderJournal()">All Events</button>
+      <button class="tab-btn ${journalTab==='trades'?'active':''}" onclick="journalTab='trades';renderJournal()">My Trades</button>
+    </div><div class="empty-state">Loading...</div>`;
+  if (journalTab === 'trades') { await renderHistory(); return; }
+  const data = await GET('/journal');
+  journalDataCache = data.events || [];
+  const filtered = applyRowFilters(journalDataCache);
+  const rows = filtered.map(ev => {
+    const traded = ev.trade_id != null;
+  return `<tr id="jrow-${ev.id}">
+    <td class="mono" style="font-size:11px;white-space:nowrap">${ev.event_date}</td>
+    <td class="mono" style="font-size:11px;color:var(--text3)">${ev.event_time||'—'}</td>
+    <td style="font-size:12px;font-weight:600">${ev.your_name.replace(/ US$| UK$/,'')}</td>
+    <td>${countryBadge(ev.country)}</td>
+    <td><span class="badge ${ev.impact==='red'?'loss':'caution'}">${(ev.impact||'—').toUpperCase()}</span></td>
+    <td class="mono" style="font-size:11px">${ev.previous||'—'}</td>
+    <td class="mono" style="font-size:11px">${ev.forecast||'—'}</td>
+    <td class="mono" style="font-size:11px;font-weight:700">${ev.actual||'—'}</td>
+    <td>${bmBadge(ev.beat_miss)}</td>
+    <td>${dirIcon(ev.direction_5m)}</td>
+    <td><span class="pip-pill ${pipClass(ev.pip_5m)}">${pipLabel(ev.pip_5m)}</span></td>
+    <td><span class="pip-pill ${pipClass(ev.pip_15m)}">${pipLabel(ev.pip_15m)}</span></td>
+    <td><span class="note-cell" contenteditable="true" onblur="saveJournalNote(${ev.id}, this.textContent)">${ev.user_note||''}</span></td>
+    <td>${traded ? '<span class="badge win">✓ Traded</span>' : `<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="toggleJournalTradeForm(${ev.id})">I Traded This</button>`}</td>
+  </tr><tr id="jform-${ev.id}" style="display:none"><td colspan="14"><div class="inline-trade-form" id="jform-inner-${ev.id}"></div></td></tr>`;
+  }).join('');
+  m.innerHTML = `<div class="page-header"><div class="page-title">Journal</div><div class="page-sub">${filtered.length} events · All news occurrences with price reactions</div></div>
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="journalTab='events';renderJournal()">All Events</button>
+      <button class="tab-btn" onclick="journalTab='trades';renderJournal()">My Trades</button>
+    </div>
+    ${renderFilterBar('renderJournal')}
+    <div class="card">${filtered.length===0?'<div class="empty-state">No events match this filter.</div>':`
+      <div class="table-wrap"><table><tr><th>Date</th><th>Time</th><th>Event</th><th>Country</th><th>Impact</th><th>Prev</th><th>Forecast</th><th>Actual</th><th>Beat/Miss</th><th>Dir 5M</th><th>Pips 5M</th><th>Pips 15M</th><th>Note</th><th></th></tr>${rows}</table></div>`}
+    </div>`;
+}
+
+async function saveJournalNote(eventId, note) {
+  try {
+    await POST('/journal/' + eventId + '/note', { note: (note || '').trim() });
+    toast('Note saved', 'success');
+  } catch(e) { toast('Failed to save note: ' + e.message, 'error'); }
+}
+
+function toggleJournalTradeForm(eventId) {
+  const row = document.getElementById('jform-' + eventId);
+  const inner = document.getElementById('jform-inner-' + eventId);
+  if (!row || !inner) return;
+  const show = row.style.display === 'none';
+  row.style.display = show ? '' : 'none';
+  if (!show) return;
+
+  const ev = (journalDataCache || []).find(e => e.id === eventId);
+  if (!ev) return;
+  const sameDay = (journalDataCache || []).filter(e => e.event_date === ev.event_date && e.id !== eventId);
+  const uniqueOthers = [...new Set(sameDay.map(e => e.your_name))];
+  const comboTags = uniqueOthers.map(n => `<span class="news-tag">${n.replace(/ US$| UK$/,'')}</span>`).join('');
+  const allNames = [...new Set((journalDataCache || []).map(e => e.your_name))].sort();
+  const nameOpts = (selected) => '<option value="">— None —</option>' + allNames.map(n =>
+    `<option value="${n}" ${n === selected ? 'selected' : ''}>${n}</option>`).join('');
+
+  inner.innerHTML = `
+    ${uniqueOthers.length ? `<div style="font-size:12px;color:var(--text2);margin-bottom:12px">Other events on this date: ${comboTags}</div>` : ''}
+    <div class="form-group" style="margin-bottom:10px"><label>News Event 1</label>
+      <div style="padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:13px">${ev.your_name}</div></div>
+    <div class="form-grid" style="margin-bottom:10px">
+      <div class="form-group"><label>News Event 2 (optional)</label><select id="jt-n2-${eventId}">${nameOpts(uniqueOthers[0] || '')}</select></div>
+      <div class="form-group"><label>News Event 3 (optional)</label><select id="jt-n3-${eventId}">${nameOpts(uniqueOthers[1] || '')}</select></div>
+    </div>
+    <div class="form-grid" style="margin-bottom:10px">
+      <div class="form-group"><label>Outcome</label><select id="jt-out-${eventId}"><option>Win</option><option>Loss</option></select></div>
+      <div class="form-group"><label>Entry Timing</label><input id="jt-en-${eventId}" placeholder="5 min after checking reaction"></div>
+      <div class="form-group"><label>R:R Ratio (1:X)</label><input type="number" id="jt-rr-${eventId}" placeholder="5"></div>
+      <div class="form-group"><label>SL (pips)</label><input type="number" id="jt-sl-${eventId}" placeholder="10"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px"><label>Notes</label><textarea id="jt-imp-${eventId}" style="min-height:50px"></textarea></div>
+    <button class="btn btn-primary" onclick="saveJournalTrade(${eventId})">Save Trade</button>
+    <div id="jt-result-${eventId}" style="margin-top:12px"></div>`;
+}
+
+function formatTradeAnalysis(a) {
+  if (!a || a.error || a.detail) {
+    return `<span style="color:var(--red);font-size:11px">${a?.error || a?.detail || 'No analysis available'}</span>`;
+  }
+  const ea = a.entry_analysis || {};
+  const sa = a.sl_analysis || {};
+  const ra = a.rr_analysis || {};
+  const rrLine = ra.achievable_rr != null
+    ? `R:R: <span class="mono">1:${ra.achievable_rr}</span> achievable — ${ra.suggestion || '—'}`
+    : `R:R: ${ra.suggestion || '—'}`;
+  return `<div style="font-size:11px;color:var(--text2);line-height:1.6">
+    Entry: ${ea.suggestion || '—'}<br>
+    SL: ${sa.suggestion || '—'}<br>
+    ${rrLine}
+  </div>`;
+}
+
+async function loadTradeAnalysis(tradeId) {
+  const cell = document.getElementById('trade-analysis-' + tradeId);
+  if (!cell) return;
+  cell.innerHTML = '<span style="font-size:11px;color:var(--text3)">Loading...</span>';
+  const trunc = (s, n = 120) => s && s.length > n ? s.slice(0, n) + '…' : (s || '—');
+  try {
+    const a = await GET('/trade/' + tradeId + '/analysis');
+    if (a.error) {
+      cell.innerHTML = `<span style="font-size:11px;color:var(--text3);font-style:italic">${a.overall || a.error}</span>`;
+      return;
+    }
+    const ea = a.entry_analysis || {};
+    const sa = a.sl_analysis || {};
+    const ra = a.rr_analysis || {};
+    const rrVal = ra.achievable_rr != null
+      ? `<span class="mono">1:${ra.achievable_rr}</span> achievable`
+      : '—';
+    cell.innerHTML = `<div style="font-size:11px;color:var(--text2);line-height:1.6">
+      Entry: ${trunc(ea.suggestion)}<br>
+      SL: ${trunc(sa.suggestion)}<br>
+      R:R: ${rrVal}
+    </div>`;
+  } catch(e) {
+    cell.innerHTML = '<span style="color:var(--red);font-size:11px">Connection error — is the server running?</span>';
+  }
+}
+
+async function saveJournalTrade(eventId) {
+  const g = id => document.getElementById(id)?.value || '';
+  const resultEl = document.getElementById('jt-result-' + eventId);
+  try {
+    const result = await POST('/journal/' + eventId + '/trade', {
+      outcome: g('jt-out-' + eventId), entry: g('jt-en-' + eventId),
+      ratio: parseFloat(g('jt-rr-' + eventId)) || null, sl: parseFloat(g('jt-sl-' + eventId)) || null,
+      improvement: g('jt-imp-' + eventId), news2: g('jt-n2-' + eventId), news3: g('jt-n3-' + eventId)
+    });
+    toast('Trade saved', 'success');
+    const actionCell = document.querySelector(`#jrow-${eventId} td:last-child`);
+    if (actionCell) actionCell.innerHTML = '<span class="badge win">✓ Traded</span>';
+    const formRow = document.getElementById('jform-' + eventId);
+    if (formRow) {
+      formRow.querySelectorAll('input,select,textarea,button').forEach(el => { el.disabled = true; });
+    }
+    if (resultEl) {
+      resultEl.innerHTML = '<div style="color:var(--green);font-size:12px;margin-bottom:8px">Trade saved.</div><div id="jt-analysis-' + eventId + '">Loading analysis...</div>';
+      try {
+        const a = await GET('/trade/' + result.id + '/analysis');
+        document.getElementById('jt-analysis-' + eventId).innerHTML = formatTradeAnalysis(a);
+      } catch(e) {
+        document.getElementById('jt-analysis-' + eventId).innerHTML = `<span style="color:var(--red);font-size:11px">${e.message}</span>`;
+      }
+    }
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = `<span style="color:var(--red);font-size:11px">${e.message}</span>`;
+    else toast('Failed: ' + e.message, 'error');
+  }
+}
+
+// ── HISTORY (Journal tab 2) ───────────────────────────────
+async function renderHistory() {
+  const trades = await GET('/trades');
+  document.getElementById('main').innerHTML = `
+    <div class="page-header"><div class="page-title">Journal</div><div class="page-sub">Your manually logged trades</div></div>
+    <div class="tab-bar">
+      <button class="tab-btn" onclick="journalTab='events';renderJournal()">All Events</button>
+      <button class="tab-btn active" onclick="journalTab='trades';renderJournal()">My Trades</button>
+    </div>
+    <div class="card">
+      ${trades.length===0?'<div class="empty-state">No trades yet.</div>':`
+      <div class="table-wrap"><table>
+        <tr><th>Date</th><th>News Events</th><th>Entry</th><th>Prev</th><th>Forecast</th><th>Actual</th><th>R:R</th><th>SL</th><th>Result</th><th>Notes</th><th>What You Could Have Done</th><th></th></tr>
+        ${trades.map(t=>`<tr>
+          <td class="mono" style="font-size:11px;white-space:nowrap">${t.date}</td>
+          <td style="min-width:160px">${[t.news1,t.news2,t.news3].filter(Boolean).map(n=>`<span class="news-tag">${n.replace(/ US$| UK$/,'')}</span>`).join('')}</td>
+          <td style="font-size:11px;color:var(--text2);white-space:nowrap">${t.entry||'—'}</td>
+          <td class="mono" style="font-size:11px">${t.previous||'—'}</td>
+          <td class="mono" style="font-size:11px">${t.forecast||'—'}</td>
+          <td class="mono" style="font-size:11px">${t.actual||'—'}</td>
+          <td class="mono">${t.ratio?'1:'+t.ratio:'—'}</td>
+          <td class="mono">${t.sl?t.sl+'p':'—'}</td>
+          <td><span class="badge ${t.outcome==='Win'?'win':'loss'}">${t.outcome.toUpperCase()}</span></td>
+          <td class="td-notes">${t.improvement||'—'}</td>
+          <td id="trade-analysis-${t.id}" style="max-width:240px;font-size:11px;color:var(--text2)">— <a href="#" style="font-size:10px;color:var(--blue);margin-left:4px" onclick="event.preventDefault();loadTradeAnalysis(${t.id})">Analyse</a></td>
+          <td><button class="delete-btn" onclick="delTrade(${t.id})">✕</button></td>
+        </tr>`).join('')}
+      </table></div>`}
+    </div>`;
+}
+
+async function delTrade(id) {
+  if (!confirm('Delete this trade?')) return;
+  await DEL('/trades/'+id); toast('Deleted','success'); renderHistory();
+}
+
+// ── NEWS CHECK ────────────────────────────────────────────
+async function renderNewsCheck() {
+  ratings = await GET('/ratings');
+  const tclr={Good:'win',Bad:'loss','Very Bad':'loss',Caution:'caution',Unreliable:''};
+  document.getElementById('main').innerHTML = `
+    <div class="page-header"><div class="page-title">News Ratings</div><div class="page-sub">Your personal news quality reference</div></div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">All News Events (${ratings.length})</div>
+        <div class="table-wrap"><table>
+          <tr><th>Event</th><th>Country</th><th>Rating</th><th>Comment</th><th></th></tr>
+          ${ratings.map(r=>{
+            const country = r.name.endsWith(' US') ? '<span class="country-flag flag-us">🇺🇸 USD</span>' : r.name.endsWith(' UK') ? '<span class="country-flag flag-uk">🇬🇧 GBP</span>' : '—';
+            return `<tr><td style="font-size:12px">${r.name.replace(/ US$| UK$/,'')}</td><td>${country}</td><td><span class="badge ${tclr[r.type]||''}">${r.type.toUpperCase()}</span></td><td style="font-size:11px;color:var(--text2)">${r.comment||'—'}</td><td><button class="delete-btn" onclick='delRating(${JSON.stringify(r.name)})'>✕</button></td></tr>`;
+          }).join('')}
+        </table></div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-title">Add / Update Rating</div>
+          <div class="form-group" style="margin-bottom:12px"><label>News Event Name</label><input type="text" id="nr-name" placeholder="e.g. CPI MoM US"></div>
+          <div class="form-group" style="margin-bottom:12px"><label>Country</label>
+            <select id="nr-country"><option value="US">🇺🇸 USD (US)</option><option value="UK">🇬🇧 GBP (UK)</option></select></div>
+          <div class="form-group" style="margin-bottom:12px"><label>Rating</label>
+            <select id="nr-type"><option>Good</option><option>Bad</option><option>Very Bad</option><option>Caution</option><option>Unreliable</option></select></div>
+          <div class="form-group" style="margin-bottom:16px"><label>Comment</label><textarea id="nr-cmt" placeholder="Entry conditions, notes..." style="min-height:50px"></textarea></div>
+          <button class="btn btn-primary" onclick="saveRating()">Save Rating</button>
+        </div>
+        <div class="card">
+          <div class="card-title">Rating Guide</div>
+          <div style="font-size:12px;color:var(--text2);line-height:2.2">
+            <div><span class="badge win" style="margin-right:8px">GOOD</span>Reacts well, worth trading</div>
+            <div><span class="badge loss" style="margin-right:8px">BAD</span>Low power, avoid unless crazy reaction</div>
+            <div><span class="badge caution" style="margin-right:8px">CAUTION</span>Uncertain — check before entering</div>
+            <div><span class="badge neutral" style="margin-right:8px">UNRELIABLE</span>Skip entirely</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function saveRating() {
+  const name = document.getElementById('nr-name')?.value.trim();
+  const country = document.getElementById('nr-country')?.value;
+  if (!name) { toast('Name required','error'); return; }
+  const fullName = name.endsWith(' US') || name.endsWith(' UK') ? name : `${name} ${country}`;
+  await POST('/ratings',{name:fullName,type:document.getElementById('nr-type')?.value,comment:document.getElementById('nr-cmt')?.value.trim()||''});
+  toast(`Saved "${fullName}"`, 'success'); renderNewsCheck();
+}
+
+async function delRating(name) {
+  if (!confirm(`Delete rating for "${name}"?`)) return;
+  await DEL('/ratings/'+encodeURIComponent(name)); toast('Deleted','success'); renderNewsCheck();
+}
+
+// ── SETTINGS ──────────────────────────────────────────────
+async function renderSettings() {
+  const s = await GET('/settings');
+  document.getElementById('main').innerHTML = `
+    <div class="page-header"><div class="page-title">Settings</div><div class="page-sub">OANDA API connection and data management</div></div>
+    <div class="two-col">
+      <div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="settings-section-title">OANDA API Connection</div>
+          <div class="form-group" style="margin-bottom:12px"><label>Environment</label>
+            <select id="st-env"><option value="practice" ${s.env==='practice'?'selected':''}>Practice (Demo)</option><option value="live" ${s.env==='live'?'selected':''}>Live</option></select></div>
+          <div class="form-group" style="margin-bottom:12px"><label>Personal Access Token</label>
+            <input type="password" id="st-tok" placeholder="Paste your OANDA API token" value="${s.token}">
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">OANDA HUB &rarr; Tools &rarr; API &rarr; Generate</div></div>
+          <div class="form-group" style="margin-bottom:16px"><label>Account ID</label>
+            <input type="text" id="st-acc" placeholder="e.g. 001-004-1234567-001" value="${s.account_id}">
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">OANDA HUB &rarr; Accounts &rarr; v20 Account Number</div></div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" onclick="saveSettings()">Save &amp; Connect</button>
+            <button class="btn btn-secondary" onclick="testConn()">Test Connection</button>
+          </div>
+          <div id="conn-res" style="margin-top:12px;font-size:12px"></div>
+        </div>
+        <div class="card">
+          <div class="settings-section-title">Data Management</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.6">
+            All data stored in Supabase Postgres (cloud database).
+          </div>
+          <div style="font-size:12px;color:var(--amber);margin-bottom:16px;line-height:1.6">
+            Historical data goes back to Jan 2020. First sync only pulls from Jan 2025. To pull full history, click <strong>Full Resync</strong>.
+          </div>
+          <div style="display:flex;flex-wrap:gap:10px;margin-bottom:16px">
+            <button class="btn btn-blue" onclick="startFullSync()">Full Resync (Jan 2020)</button>
+            <button class="btn btn-danger" onclick="clearTrades()">Clear All Trade Data</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="settings-section-title">Strategy Rules</div>
+        <div style="font-size:12px;line-height:2.4;color:var(--text2)">
+          <div>2 Good news events &rarr; <span style="color:var(--amber)">Caution — can cancel out</span></div>
+          <div>2 Bad news events &rarr; <span style="color:var(--green)">Good combo — check reaction</span></div>
+          <div>1 Good + 1 Bad &rarr; <span style="color:var(--green)">Good combo — check reaction</span></div>
+          <div>Data BEAT forecast &rarr; <span style="color:var(--green)">Strong directional signal</span></div>
+          <div>Data MISSED forecast &rarr; <span style="color:var(--green)">Strong opposing signal</span></div>
+          <div>Data inline with forecast &rarr; <span style="color:var(--amber)">Weak — watch carefully</span></div>
+          <div>Unreliable news &rarr; <span style="color:var(--red)">Skip entirely</span></div>
+        </div>
+        <div class="divider"></div>
+        <div class="settings-section-title">Data Sources</div>
+        <div style="font-size:12px;color:var(--text2);line-height:2">
+          <div>📅 <strong>News calendar:</strong> Forex Factory (free scraper)</div>
+          <div>📈 <strong>Price data:</strong> OANDA v20 REST API</div>
+          <div>🗃️ <strong>Storage:</strong> Supabase (Postgres)</div>
+          <div>🔄 <strong>Auto-sync:</strong> Daily when app is running</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function saveSettings() {
+  const tok=document.getElementById('st-tok')?.value.trim()||'';
+  const acc=document.getElementById('st-acc')?.value.trim()||'';
+  const env=document.getElementById('st-env')?.value||'practice';
+  if (!tok||!acc){toast('Token and Account ID are required','error');return;}
+  const el=document.getElementById('conn-res');
+  if(el)el.innerHTML='<span style="color:var(--text3)">Saving & testing...</span>';
+  try {
+    await POST('/settings',{token:tok,account_id:acc,env});
+    toast('Settings saved','success');
+    const r=await POST('/oanda/test',{token:tok,account_id:acc,env});
+    setConn(r.ok);
+    if(el)el.innerHTML=r.ok?`<span style="color:var(--green)">✓ Connected — Balance: ${r.balance} ${r.currency}</span>`:`<span style="color:var(--red)">✗ ${r.detail}</span>`;
+  } catch(e){if(el)el.innerHTML=`<span style="color:var(--red)">✗ ${e.message}</span>`;setConn(false);}
+}
+
+async function testConn() {
+  const tok=document.getElementById('st-tok')?.value.trim()||'';
+  const acc=document.getElementById('st-acc')?.value.trim()||'';
+  const env=document.getElementById('st-env')?.value||'practice';
+  const el=document.getElementById('conn-res');
+  if(!tok||!acc){if(el)el.innerHTML='<span style="color:var(--red)">✗ Enter token and account ID first</span>';return;}
+  if(el)el.innerHTML='<span style="color:var(--text3)">Testing...</span>';
+  try{const r=await POST('/oanda/test',{token:tok,account_id:acc,env});setConn(r.ok);if(el)el.innerHTML=r.ok?`<span style="color:var(--green)">✓ Connected — Balance: ${r.balance} ${r.currency}</span>`:`<span style="color:var(--red)">✗ ${r.detail}</span>`;}
+  catch(e){if(el)el.innerHTML=`<span style="color:var(--red)">✗ ${e.message}</span>`;}
+}
+
+async function clearTrades() {
+  if(!confirm('Delete ALL trade history?'))return;
+  const trades=await GET('/trades');
+  for(const t of trades)await DEL('/trades/'+t.id);
+  toast('All trades cleared','success'); nav('journal'); journalTab='trades';
+}
+
+function setConn(ok){
+  const dot=document.getElementById('conn-dot'),lbl=document.getElementById('conn-label');
+  if(dot)dot.className='conn-dot'+(ok?' on':'');
+  if(lbl)lbl.textContent=ok?'OANDA connected':'Not connected';
+}
+
+function toast(msg,type='success'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className=`toast ${type} show`;
+  setTimeout(()=>{t.className=`toast ${type}`;},2800);
+}
+
+// ── INIT ──────────────────────────────────────────────────
+render();
+setInterval(()=>{if(page==='dashboard')loadPrice();},30000);
+</script>
+</body>
+</html>

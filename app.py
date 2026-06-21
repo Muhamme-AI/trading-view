@@ -43,14 +43,17 @@ async def database_error_handler(request: Request, exc: DatabaseError):
 
 @app.get("/api/health")
 def health_check():
+    info = {
+        "status": "ok",
+        "platform": "vercel" if os.getenv("VERCEL") else "local",
+    }
     try:
         check_connection()
-        return {"status": "ok", "database": "connected"}
+        info["database"] = "connected"
     except DatabaseError as e:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "error", "database": "disconnected", "detail": str(e)},
-        )
+        info["database"] = "disconnected"
+        info["detail"] = str(e)
+    return info
 
 # ── DATABASE ──────────────────────────────────────────────
 def init_db():
@@ -908,14 +911,19 @@ def get_trade_brief(event_name: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ── SERVE FRONTEND ────────────────────────────────────────
+# ── SERVE FRONTEND (local dev; on Vercel use public/index.html) ──
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
-    html_path = Path(__file__).parent / "index.html"
-    return HTMLResponse(content=html_path.read_text())
+    for path in (Path(__file__).parent / "public" / "index.html",
+                 Path(__file__).parent / "index.html"):
+        if path.exists():
+            return HTMLResponse(content=path.read_text())
+    raise HTTPException(status_code=404, detail="index.html not found")
 
 @app.on_event("startup")
 def on_startup():
+    if os.getenv("VERCEL"):
+        return
     try:
         init_db()
     except Exception as e:

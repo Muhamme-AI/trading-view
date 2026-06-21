@@ -2,11 +2,11 @@
 
 import os
 
-import psycopg
-from psycopg.rows import dict_row
 from dotenv import load_dotenv
 
 load_dotenv()
+
+_DRIVER = None
 
 
 class DatabaseError(RuntimeError):
@@ -26,20 +26,18 @@ def get_database_url() -> str:
     return url
 
 
-def _connect():
-    url = get_database_url()
-    kwargs = {"row_factory": dict_row, "connect_timeout": 10}
-    # Supabase pooler (PgBouncer) — required for Vercel/serverless
-    if "pooler.supabase.com" in url or ":6543" in url:
-        kwargs["prepare_threshold"] = None
-    return psycopg.connect(url, **kwargs)
+def _row_to_dict(row, description):
+    if isinstance(row, dict):
+        return row
+    if description:
+        return {desc[0]: val for desc, val in zip(description, row)}
+    return row
 
 
 class DbCursor:
-    """Cursor wrapper matching common sqlite3 usage patterns."""
-
-    def __init__(self, cursor):
+    def __init__(self, cursor, driver):
         self._cursor = cursor
+        self._driver = driver
         self.rowcount = 0
 
     def execute(self, sql, params=None):
@@ -53,18 +51,33 @@ class DbCursor:
         return self
 
     def fetchone(self):
-        return self._cursor.fetchone()
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        if self._driver == "psycopg2":
+            return row
+        return _row_to_dict(row, self._cursor.description)
 
     def fetchall(self):
-        return self._cursor.fetchall()
+        rows = self._cursor.fetchall()
+        if self._driver == "psycopg2":
+            return rows
+        desc = self._cursor.description
+        return [_row_to_dict(row, desc) for row in rows]
 
 
 class DbConnection:
-    def __init__(self, conn):
+    def __init__(self, conn, driver, cursor_factory=None):
         self._conn = conn
+        self._driver = driver
+        self._cursor_factory = cursor_factory
 
     def cursor(self):
-        return DbCursor(self._conn.cursor(row_factory=dict_row))
+        if self._driver == "psycopg2":
+            cur = self._conn.cursor(cursor_factory=self._cursor_factory)
+        else:
+            cur = self._conn.cursor()
+        return DbCursor(cur, self._driver)
 
     def execute(self, sql, params=None):
         return self.cursor().execute(sql, params)
@@ -76,16 +89,52 @@ class DbConnection:
         self._conn.close()
 
 
+def _connect_psycopg2(url):
+    import psycopg2
+    import psycopg2.extras
+    conn = psycopg2.connect(url, connect_timeout=10)
+    return conn, "psycopg2", psycopg2.extras.RealDictCursor
+
+
+def _connect_psycopg3(url):
+    import psycopg
+    from psycopg.rows import dict_row
+    kwargs = {"row_factory": dict_row, "connect_timeout": 10}
+    if "pooler.supabase.com" in url or ":6543" in url:
+        kwargs["prepare_threshold"] = None
+    conn = psycopg.connect(url, **kwargs)
+    return conn, "psycopg3", None
+
+
+def _connect():
+    global _DRIVER
+    url = get_database_url()
+    for connect_fn in (_connect_psycopg2, _connect_psycopg3):
+        try:
+            conn, driver, cursor_factory = connect_fn(url)
+            _DRIVER = driver
+            return conn, driver, cursor_factory
+        except ImportError:
+            continue
+        except Exception:
+            if connect_fn is _connect_psycopg3:
+                raise
+            continue
+    raise DatabaseError("No Postgres driver available. Install psycopg2-binary or psycopg.")
+
+
 def get_db() -> DbConnection:
     try:
-        conn = _connect()
-    except psycopg.OperationalError as e:
+        conn, driver, cursor_factory = _connect()
+    except DatabaseError:
+        raise
+    except Exception as e:
         raise DatabaseError(
             f"Could not connect to Supabase Postgres: {e}. "
             "On Vercel, use the Supabase *Connection Pooler* URI (port 6543), not the direct db.* URL."
         ) from e
     conn.autocommit = False
-    return DbConnection(conn)
+    return DbConnection(conn, driver, cursor_factory)
 
 
 def check_connection() -> None:
