@@ -17,7 +17,7 @@ import math
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
-from db import get_db, check_connection
+from db import get_db, check_connection, DatabaseError
 from scraper import (
     run_sync, get_analysis_summary, get_event_history,
     get_last_sync, get_journal_rows, save_journal_note,
@@ -33,6 +33,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(DatabaseError)
+async def database_error_handler(request: Request, exc: DatabaseError):
+    return JSONResponse(
+        status_code=503,
+        content={"error": "Database unavailable", "detail": str(exc)},
+    )
+
+@app.get("/api/health")
+def health_check():
+    try:
+        check_connection()
+        return {"status": "ok", "database": "connected"}
+    except DatabaseError as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "database": "disconnected", "detail": str(e)},
+        )
 
 # ── DATABASE ──────────────────────────────────────────────
 def init_db():
