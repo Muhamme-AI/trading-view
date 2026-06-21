@@ -630,6 +630,21 @@ def get_news_event(event_id: int) -> dict | None:
     conn.close()
     return dict(row) if row else None
 
+def get_upcoming_from_db(days: int = 7) -> list:
+    """Upcoming watchlist events from synced news_events (fallback when FF scrape is blocked)."""
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days)
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT your_name, ff_title, country, event_date, event_time,
+               previous, forecast, actual, impact, beat_miss
+        FROM news_events
+        WHERE event_date >= %s AND event_date <= %s
+        ORDER BY event_date ASC, event_time ASC
+    """, (today.isoformat(), end_date.isoformat())).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 async def scrape_upcoming(days: int = 7) -> list:
     """Scrape FF for events in the next N days."""
     today = datetime.now().date()
