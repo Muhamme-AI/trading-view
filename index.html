@@ -204,7 +204,9 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const API = 'http://localhost:8000/api';
+const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000/api'
+  : `${location.origin}/api`;
 const NAV_PAGES = ['thisweek','dashboard','performance','analysis','journal','scorer','log','newscheck','settings'];
 let page = 'dashboard';
 let ratings = [];
@@ -579,6 +581,13 @@ async function renderPerformance() {
 }
 
 // ── THIS WEEK ─────────────────────────────────────────────
+function localDateStr(dt) {
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 async function renderThisWeek() {
   const m = document.getElementById('main');
   m.innerHTML = `<div class="page-header"><div class="page-title">This Week</div><div class="page-sub">Upcoming USD &amp; GBP news &middot; next 7 days</div></div><div class="empty-state">Loading upcoming events...</div>`;
@@ -591,7 +600,7 @@ async function renderThisWeek() {
   for (let i = 0; i < 7; i++) {
     const dt = new Date();
     dt.setDate(dt.getDate() + i);
-    const d = dt.toISOString().split('T')[0];
+    const d = localDateStr(dt);
     const label = `${dayNames[dt.getDay()]} · <span class="mono">${d}</span>`;
     if (!byDay[d] || byDay[d].length === 0) {
       sections.push(`<div class="day-header">${label}</div><div style="font-size:12px;color:var(--text3);padding:8px 0 12px">No tracked events today.</div>`);
@@ -610,7 +619,8 @@ async function renderThisWeek() {
     }
   }
   const body = sections.length ? `<div class="card">${sections.join('')}</div>` : '<div class="card"><div class="empty-state">No tracked events in the next 7 days.</div></div>';
-  m.innerHTML = `<div class="page-header"><div class="page-title">This Week</div><div class="page-sub">Upcoming USD &amp; GBP news &middot; next 7 days${data.cached?' · cached':''}</div></div>${body}
+  const sourceNote = data.source === 'database' ? ' · from synced data' : '';
+  m.innerHTML = `<div class="page-header"><div class="page-title">This Week</div><div class="page-sub">Upcoming USD &amp; GBP news &middot; next 7 days${data.cached?' · cached':''}${sourceNote}</div></div>${body}
     <div style="margin-top:12px"><button class="btn btn-secondary" onclick="renderThisWeek()">↻ Refresh</button></div>`;
 }
 

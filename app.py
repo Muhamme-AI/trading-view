@@ -21,7 +21,7 @@ from db import get_db, check_connection
 from scraper import (
     run_sync, get_analysis_summary, get_event_history,
     get_last_sync, get_journal_rows, save_journal_note,
-    get_news_event, scrape_upcoming, get_brief, NEWS_MAP,
+    get_news_event, scrape_upcoming, get_upcoming_from_db, get_brief, NEWS_MAP,
 )
 
 # ── APP SETUP ─────────────────────────────────────────────
@@ -852,20 +852,35 @@ def create_journal_trade(event_id: int, body: JournalTrade):
     return {"id": trade_id, "message": "Trade saved"}
 
 # ── ROUTES: THIS WEEK ─────────────────────────────────────
-_upcoming_cache = {"data": None, "expires": None}
+_upcoming_cache = {"data": None, "expires": None, "source": None}
 
 @app.get("/api/upcoming")
 async def get_upcoming():
     global _upcoming_cache
     now = datetime.now()
-    if _upcoming_cache["data"] and _upcoming_cache["expires"] and now < _upcoming_cache["expires"]:
-        return {"events": _upcoming_cache["data"], "cached": True}
+    if _upcoming_cache["data"] is not None and _upcoming_cache["expires"] and now < _upcoming_cache["expires"]:
+        return {
+            "events": _upcoming_cache["data"],
+            "cached": True,
+            "source": _upcoming_cache.get("source", "live"),
+        }
     try:
         events = await scrape_upcoming(7)
+        source = "live"
+        if not events:
+            events = get_upcoming_from_db(7)
+            source = "database"
         _upcoming_cache["data"] = events
         _upcoming_cache["expires"] = now + timedelta(hours=1)
-        return {"events": events, "cached": False}
+        _upcoming_cache["source"] = source
+        return {"events": events, "cached": False, "source": source}
     except Exception as e:
+        events = get_upcoming_from_db(7)
+        if events:
+            _upcoming_cache["data"] = events
+            _upcoming_cache["expires"] = now + timedelta(hours=1)
+            _upcoming_cache["source"] = "database"
+            return {"events": events, "cached": False, "source": "database", "warning": str(e)}
         return {"events": [], "error": str(e)}
 
 @app.get("/api/brief/{event_name}")
@@ -880,6 +895,13 @@ def get_trade_brief(event_name: str):
 async def serve_frontend():
     html_path = Path(__file__).parent / "index.html"
     return HTMLResponse(content=html_path.read_text())
+
+@app.on_event("startup")
+def on_startup():
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Database startup check failed: {e}")
 
 # ── RUN ───────────────────────────────────────────────────
 if __name__ == "__main__":
