@@ -9,14 +9,30 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+class DatabaseError(RuntimeError):
+    """Raised when the database is unavailable or misconfigured."""
+
+
 def get_database_url() -> str:
     url = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
     if not url:
-        raise RuntimeError(
-            "Set DATABASE_URL (or SUPABASE_DB_URL) in .env — "
-            "Supabase → Project Settings → Database → Connection string (URI)"
+        raise DatabaseError(
+            "DATABASE_URL is not set. Add it in Vercel → Settings → Environment Variables "
+            "(use Supabase Connection Pooler URI, not localhost)."
         )
+    if "supabase.co" in url and "sslmode=" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}sslmode=require"
     return url
+
+
+def _connect():
+    url = get_database_url()
+    kwargs = {"row_factory": dict_row, "connect_timeout": 10}
+    # Supabase pooler (PgBouncer) — required for Vercel/serverless
+    if "pooler.supabase.com" in url or ":6543" in url:
+        kwargs["prepare_threshold"] = None
+    return psycopg.connect(url, **kwargs)
 
 
 class DbCursor:
@@ -61,7 +77,13 @@ class DbConnection:
 
 
 def get_db() -> DbConnection:
-    conn = psycopg.connect(get_database_url(), row_factory=dict_row)
+    try:
+        conn = _connect()
+    except psycopg.OperationalError as e:
+        raise DatabaseError(
+            f"Could not connect to Supabase Postgres: {e}. "
+            "On Vercel, use the Supabase *Connection Pooler* URI (port 6543), not the direct db.* URL."
+        ) from e
     conn.autocommit = False
     return DbConnection(conn)
 
