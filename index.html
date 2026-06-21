@@ -216,7 +216,57 @@ let journalDataCache = null;
 let pendingLogNews = '';
 let pendingLogPrefill = null;
 let liveAssistantState = null;
+let dashTradeType = 'all';
+let perfTradeType = 'all';
 let filterState = { range: 'all', dateFrom: '', dateTo: '', country: 'all', impact: 'all', tradeableOnly: false };
+
+function tradeTypeLabel(type) {
+  return (type || 'backtesting') === 'live' ? 'Live Trading' : 'Backtesting';
+}
+
+function tradeTypeBadge(type) {
+  return (type || 'backtesting') === 'live'
+    ? '<span class="badge win">LIVE</span>'
+    : '<span class="badge neutral">BACKTEST</span>';
+}
+
+function withType(path, type) {
+  if (!type || type === 'all') return path;
+  return path + (path.includes('?') ? '&' : '?') + 'type=' + type;
+}
+
+function analyticsPath(type) {
+  return withType('/analytics', type);
+}
+
+function tradeTypeDropdown(selected, onChangeFn) {
+  const opts = [
+    ['all', 'All Trades'],
+    ['backtesting', 'Backtesting'],
+    ['live', 'Live Trading'],
+  ];
+  return `<div class="filter-bar" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+    <span style="font-size:12px;color:var(--text2)">KPI filter:</span>
+    <select onchange="${onChangeFn}(this.value)" style="padding:6px 12px;font-size:12px">
+      ${opts.map(([val, label]) =>
+        `<option value="${val}" ${selected === val ? 'selected' : ''}>${label}</option>`
+      ).join('')}
+    </select>
+  </div>`;
+}
+
+function setDashTradeType(val) { dashTradeType = val; renderDash(); }
+function setPerfTradeType(val) { perfTradeType = val; renderPerformance(); }
+
+function emptyTradesMessage(type) {
+  if (type === 'live') {
+    return 'No live trades yet. Everything logged so far is backtesting — log a trade as Live Trading when you take a real position.';
+  }
+  if (type === 'backtesting') {
+    return 'No backtesting trades yet.';
+  }
+  return 'No trades yet. Log your first trade to see KPIs here.';
+}
 
 // ── API HELPERS ───────────────────────────────────────────
 async function api(method, path, body) {
@@ -358,8 +408,12 @@ async function render() {
 
 // ── DASHBOARD ─────────────────────────────────────────────
 async function renderDash() {
-  const [s, recent] = await Promise.all([GET('/analytics'), GET('/trades')]);
-  const top5 = recent.slice(0,5);
+  const [s, recent] = await Promise.all([GET(analyticsPath(dashTradeType)), GET('/trades')]);
+  const filteredRecent = dashTradeType === 'all'
+    ? recent
+    : recent.filter(t => (t.trade_type || 'backtesting') === dashTradeType);
+  const top5 = filteredRecent.slice(0, 5);
+  const typeLabel = dashTradeType === 'all' ? 'All trades' : tradeTypeLabel(dashTradeType);
   const max = Math.max(...(s.news_performance||[]).map(n=>n.total),1);
   const bars = (s.news_performance||[]).slice(0,6).map(n=>{
     const wh=Math.round(n.wins/max*65), lh=Math.round(n.losses/max*65);
@@ -367,7 +421,8 @@ async function renderDash() {
     return `<div class="chart-bar-wrap"><div style="display:flex;align-items:flex-end;gap:2px;height:65px"><div class="chart-bar win-bar" style="height:${wh}px;width:10px"></div><div class="chart-bar loss-bar" style="height:${lh}px;width:10px"></div></div><div class="chart-label" title="${n.news}">${nm}</div></div>`;
   }).join('');
   document.getElementById('main').innerHTML = `
-    <div class="page-header"><div class="page-title">Dashboard</div><div class="page-sub">GBP/USD &middot; 5M &middot; News-driven strategy</div></div>
+    <div class="page-header"><div class="page-title">Dashboard</div><div class="page-sub">GBP/USD &middot; 5M &middot; News-driven strategy &middot; ${typeLabel}</div></div>
+    ${tradeTypeDropdown(dashTradeType, 'setDashTradeType')}
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value ${s.win_rate>=50?'green':'red'}">${s.win_rate}%</div><div class="stat-sub">${s.wins}W / ${s.losses}L of ${s.total} trades</div></div>
       <div class="stat-card"><div class="stat-label">Avg R:R (wins)</div><div class="stat-value amber">${s.avg_ratio?'1:'+s.avg_ratio:'—'}</div><div class="stat-sub">Risk:Reward on winning trades</div></div>
@@ -376,15 +431,16 @@ async function renderDash() {
     </div>
     <div class="two-col">
       <div class="card"><div class="card-title">News Performance (your trades)</div>
-        ${bars?`<div class="chart-bars">${bars}</div><div style="display:flex;gap:16px;margin-top:12px"><span style="font-size:11px;color:var(--green)">&#9632; Wins</span><span style="font-size:11px;color:var(--red)">&#9632; Losses</span></div>`:'<div class="empty-state">Log trades to see data</div>'}
+        ${bars?`<div class="chart-bars">${bars}</div><div style="display:flex;gap:16px;margin-top:12px"><span style="font-size:11px;color:var(--green)">&#9632; Wins</span><span style="font-size:11px;color:var(--red)">&#9632; Losses</span></div>`:`<div class="empty-state">${emptyTradesMessage(dashTradeType)}</div>`}
       </div>
       <div class="card"><div class="card-title">Latest Trades</div>
-        ${top5.length?`<table><tr><th>Date</th><th>News</th><th>R:R</th><th>Result</th></tr>
+        ${top5.length?`<table><tr><th>Date</th><th>Type</th><th>News</th><th>R:R</th><th>Result</th></tr>
           ${top5.map(t=>`<tr><td class="mono" style="font-size:11px">${t.date}</td>
+            <td>${tradeTypeBadge(t.trade_type)}</td>
             <td>${[t.news1,t.news2,t.news3].filter(Boolean).map(n=>`<span class="news-tag">${n.replace(/ US$| UK$/,'')}</span>`).join('')}</td>
             <td class="mono">${t.ratio?'1:'+t.ratio:'—'}</td>
             <td><span class="badge ${t.outcome==='Win'?'win':'loss'}">${t.outcome.toUpperCase()}</span></td></tr>`).join('')}</table>`
-          :'<div class="empty-state">No trades yet</div>'}
+          :`<div class="empty-state">${emptyTradesMessage(dashTradeType)}</div>`}
       </div>
     </div>`;
   loadPrice();
@@ -445,14 +501,16 @@ function perfHalfStats(trades) {
 }
 
 async function renderPerformance() {
-  const data = await GET('/performance');
+  const data = await GET(withType('/performance', perfTradeType));
   const o = data.overall;
   const total = o.total_trades;
+  const typeLabel = perfTradeType === 'all' ? 'All trades' : tradeTypeLabel(perfTradeType);
 
   if (!total) {
     document.getElementById('main').innerHTML = `
-      <div class="page-header"><div class="page-title">Performance</div><div class="page-sub">Your trading results over time</div></div>
-      <div class="card"><div class="empty-state">Start logging trades to see your performance.<br><br>Every trade you log here becomes data that makes your next trade smarter.</div></div>`;
+      <div class="page-header"><div class="page-title">Performance</div><div class="page-sub">Your trading results over time &middot; ${typeLabel}</div></div>
+      ${tradeTypeDropdown(perfTradeType, 'setPerfTradeType')}
+      <div class="card"><div class="empty-state">${emptyTradesMessage(perfTradeType)}</div></div>`;
     return;
   }
 
@@ -537,7 +595,8 @@ async function renderPerformance() {
   const msFill = ms.green ? 'var(--green)' : 'var(--accent)';
 
   document.getElementById('main').innerHTML = `
-    <div class="page-header"><div class="page-title">Performance</div><div class="page-sub">Your trading results over time</div></div>
+    <div class="page-header"><div class="page-title">Performance</div><div class="page-sub">Your trading results over time &middot; ${typeLabel}</div></div>
+    ${tradeTypeDropdown(perfTradeType, 'setPerfTradeType')}
     <div class="stats-grid stats-grid-5">
       <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value ${o.win_rate >= 50 ? 'green' : 'red'}">${o.win_rate}%</div><div class="stat-sub">${o.wins}W / ${o.losses}L of ${total} trades</div></div>
       <div class="stat-card"><div class="stat-label">Expectancy</div><div class="stat-value ${expClass}">${o.expectancy.toFixed(1)}R</div><div class="stat-sub">Expected R per trade</div><div style="font-size:10px;color:var(--text3);margin-top:4px">Above 1.0R = profitable strategy over time</div></div>
@@ -1182,6 +1241,7 @@ function logLiveTrade(outcome) {
     sl: la.brief.suggested_sl,
     actual: la.actual,
     forecast: la.brief.forecast,
+    trade_type: 'live',
   };
   closeBriefModal();
   nav('log');
@@ -1367,6 +1427,7 @@ async function renderLog() {
       <div class="form-grid" style="margin-bottom:16px">
         <div class="form-group"><label>Date</label><input type="date" id="lg-date" value="${new Date().toISOString().split('T')[0]}"></div>
         <div class="form-group"><label>Outcome</label><select id="lg-out"><option value="Win">Win</option><option value="Loss">Loss</option></select></div>
+        <div class="form-group"><label>Trade Type</label><select id="lg-type"><option value="live">Live Trading</option><option value="backtesting">Backtesting</option></select></div>
       </div>
       <div class="divider"></div>
       <div class="card-title">News Events</div>
@@ -1400,6 +1461,7 @@ async function renderLog() {
     if (pre.sl != null) { const s = document.getElementById('lg-sl'); if (s) s.value = pre.sl; }
     if (pre.forecast) { const f = document.getElementById('lg-fc'); if (f) f.value = pre.forecast; }
     if (pre.actual) { const a = document.getElementById('lg-ac'); if (a) a.value = pre.actual; }
+    if (pre.trade_type) { const t = document.getElementById('lg-type'); if (t) t.value = pre.trade_type; }
   }
 }
 
@@ -1408,7 +1470,7 @@ async function saveTrade() {
   const date=g('lg-date'), n1=g('lg-n1');
   if (!date||!n1) { toast('Date and at least one news event required','error'); return; }
   try {
-    await POST('/trades',{date,news1:n1,news2:g('lg-n2'),news3:g('lg-n3'),previous:g('lg-pv'),forecast:g('lg-fc'),actual:g('lg-ac'),entry:g('lg-en'),ratio:parseFloat(g('lg-rr'))||null,sl:parseFloat(g('lg-sl'))||null,outcome:g('lg-out'),improvement:g('lg-imp')});
+    await POST('/trades',{date,news1:n1,news2:g('lg-n2'),news3:g('lg-n3'),previous:g('lg-pv'),forecast:g('lg-fc'),actual:g('lg-ac'),entry:g('lg-en'),ratio:parseFloat(g('lg-rr'))||null,sl:parseFloat(g('lg-sl'))||null,outcome:g('lg-out'),improvement:g('lg-imp'),trade_type:g('lg-type')||'live'});
     toast('Trade saved','success'); nav('journal'); journalTab='trades';
   } catch(e) { toast('Failed: '+e.message,'error'); }
 }
@@ -1494,6 +1556,7 @@ function toggleJournalTradeForm(eventId) {
     </div>
     <div class="form-grid" style="margin-bottom:10px">
       <div class="form-group"><label>Outcome</label><select id="jt-out-${eventId}"><option>Win</option><option>Loss</option></select></div>
+      <div class="form-group"><label>Trade Type</label><select id="jt-type-${eventId}"><option value="live">Live Trading</option><option value="backtesting">Backtesting</option></select></div>
       <div class="form-group"><label>Entry Timing</label><input id="jt-en-${eventId}" placeholder="5 min after checking reaction"></div>
       <div class="form-group"><label>R:R Ratio (1:X)</label><input type="number" id="jt-rr-${eventId}" placeholder="5"></div>
       <div class="form-group"><label>SL (pips)</label><input type="number" id="jt-sl-${eventId}" placeholder="10"></div>
@@ -1554,7 +1617,8 @@ async function saveJournalTrade(eventId) {
     const result = await POST('/journal/' + eventId + '/trade', {
       outcome: g('jt-out-' + eventId), entry: g('jt-en-' + eventId),
       ratio: parseFloat(g('jt-rr-' + eventId)) || null, sl: parseFloat(g('jt-sl-' + eventId)) || null,
-      improvement: g('jt-imp-' + eventId), news2: g('jt-n2-' + eventId), news3: g('jt-n3-' + eventId)
+      improvement: g('jt-imp-' + eventId), news2: g('jt-n2-' + eventId), news3: g('jt-n3-' + eventId),
+      trade_type: g('jt-type-' + eventId) || 'live'
     });
     toast('Trade saved', 'success');
     const actionCell = document.querySelector(`#jrow-${eventId} td:last-child`);
@@ -1590,9 +1654,10 @@ async function renderHistory() {
     <div class="card">
       ${trades.length===0?'<div class="empty-state">No trades yet.</div>':`
       <div class="table-wrap"><table>
-        <tr><th>Date</th><th>News Events</th><th>Entry</th><th>Prev</th><th>Forecast</th><th>Actual</th><th>R:R</th><th>SL</th><th>Result</th><th>Notes</th><th>What You Could Have Done</th><th></th></tr>
+        <tr><th>Date</th><th>Type</th><th>News Events</th><th>Entry</th><th>Prev</th><th>Forecast</th><th>Actual</th><th>R:R</th><th>SL</th><th>Result</th><th>Notes</th><th>What You Could Have Done</th><th></th></tr>
         ${trades.map(t=>`<tr>
           <td class="mono" style="font-size:11px;white-space:nowrap">${t.date}</td>
+          <td>${tradeTypeBadge(t.trade_type)}</td>
           <td style="min-width:160px">${[t.news1,t.news2,t.news3].filter(Boolean).map(n=>`<span class="news-tag">${n.replace(/ US$| UK$/,'')}</span>`).join('')}</td>
           <td style="font-size:11px;color:var(--text2);white-space:nowrap">${t.entry||'—'}</td>
           <td class="mono" style="font-size:11px">${t.previous||'—'}</td>

@@ -4,7 +4,7 @@ Run with: python app.py
 Then open: http://localhost:8000
 """
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -59,6 +59,7 @@ def health_check():
 def init_db():
     check_connection()
     conn = get_db()
+    ensure_trade_schema(conn)
     c = conn.cursor()
 
     c.execute("SELECT COUNT(*) AS count FROM news_ratings")
@@ -116,8 +117,8 @@ def init_db():
             ("2026-06-11","PPI MoM US","","","10 min before news",3,13,"1.1","0.7","1.1","Loss","Don't trade PPI - doesn't react, very low power"),
         ]
         c.executemany("""
-            INSERT INTO trades (date,news1,news2,news3,entry,ratio,sl,previous,forecast,actual,outcome,improvement)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            INSERT INTO trades (date,news1,news2,news3,entry,ratio,sl,previous,forecast,actual,outcome,improvement,trade_type)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'backtesting')
         """, seed_trades)
 
     conn.commit()
@@ -138,6 +139,7 @@ class Trade(BaseModel):
     outcome: str
     improvement: Optional[str] = ""
     news_event_id: Optional[int] = None
+    trade_type: Optional[str] = "live"
 
 class JournalNote(BaseModel):
     note: str
@@ -150,6 +152,35 @@ class JournalTrade(BaseModel):
     improvement: Optional[str] = ""
     news2: Optional[str] = ""
     news3: Optional[str] = ""
+    trade_type: Optional[str] = "live"
+
+VALID_TRADE_TYPES = {"backtesting", "live"}
+
+
+def normalize_trade_type(value: str | None, default: str = "backtesting") -> str:
+    if value in VALID_TRADE_TYPES:
+        return value
+    return default
+
+
+def ensure_trade_schema(conn) -> None:
+    c = conn.cursor()
+    c.execute("""
+        ALTER TABLE trades ADD COLUMN IF NOT EXISTS trade_type TEXT NOT NULL DEFAULT 'backtesting'
+    """)
+    c.execute("""
+        UPDATE trades SET trade_type = 'backtesting'
+        WHERE trade_type IS NULL OR trade_type = ''
+    """)
+    conn.commit()
+
+
+def filter_trades_by_type(trades: list[dict], trade_type: str | None) -> list[dict]:
+    if not trade_type or trade_type == "all":
+        return trades
+    if trade_type not in VALID_TRADE_TYPES:
+        return trades
+    return [t for t in trades if normalize_trade_type(t.get("trade_type")) == trade_type]
 
 class NewsRating(BaseModel):
     name: str
@@ -171,24 +202,26 @@ class TestRequest(BaseModel):
 
 # ── ROUTES: TRADES ────────────────────────────────────────
 @app.get("/api/trades")
-def get_trades():
+def get_trades(type: Optional[str] = Query(None)):
     conn = get_db()
     rows = conn.execute("SELECT * FROM trades ORDER BY date DESC, id DESC").fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    trades = [dict(r) for r in rows]
+    return filter_trades_by_type(trades, type)
 
 @app.post("/api/trades")
 def create_trade(trade: Trade):
     conn = get_db()
     c = conn.cursor()
+    trade_type = normalize_trade_type(trade.trade_type, default="live")
     c.execute("""
-        INSERT INTO trades (date,news1,news2,news3,entry,ratio,sl,previous,forecast,actual,outcome,improvement,news_event_id)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        INSERT INTO trades (date,news1,news2,news3,entry,ratio,sl,previous,forecast,actual,outcome,improvement,news_event_id,trade_type)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id
     """, (trade.date, trade.news1, trade.news2 or "", trade.news3 or "",
           trade.entry or "", trade.ratio, trade.sl,
           trade.previous or "", trade.forecast or "", trade.actual or "",
-          trade.outcome, trade.improvement or "", trade.news_event_id))
+          trade.outcome, trade.improvement or "", trade.news_event_id, trade_type))
     trade_id = c.fetchone()["id"]
     conn.commit()
     conn.close()
@@ -584,10 +617,11 @@ def score_news(req: ScoreRequest):
 
 # ── ROUTES: ANALYTICS ─────────────────────────────────────
 @app.get("/api/analytics")
-def get_analytics():
+def get_analytics(type: Optional[str] = Query(None)):
     conn = get_db()
     trades = [dict(r) for r in conn.execute("SELECT * FROM trades").fetchall()]
     conn.close()
+    trades = filter_trades_by_type(trades, type)
     wins   = [t for t in trades if t["outcome"] == "Win"]
     losses = [t for t in trades if t["outcome"] == "Loss"]
     win_rate = round(len(wins) / len(trades) * 100) if trades else 0
@@ -611,11 +645,11 @@ def get_analytics():
 MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 @app.get("/api/performance")
-def get_performance():
+def get_performance(type: Optional[str] = Query(None)):
     conn = get_db()
     rows = conn.execute("SELECT * FROM trades ORDER BY date DESC, id DESC").fetchall()
     conn.close()
-    trades = [dict(r) for r in rows]
+    trades = filter_trades_by_type([dict(r) for r in rows], type)
     chronological = list(reversed(trades))
 
     wins = [t for t in trades if t.get("outcome") == "Win"]
@@ -857,15 +891,16 @@ def create_journal_trade(event_id: int, body: JournalTrade):
         conn.close()
         raise HTTPException(status_code=400, detail="Trade already logged for this event")
     c = conn.cursor()
+    trade_type = normalize_trade_type(body.trade_type, default="live")
     c.execute("""
-        INSERT INTO trades (date, news1, news2, news3, entry, ratio, sl, previous, forecast, actual, outcome, improvement, news_event_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO trades (date, news1, news2, news3, entry, ratio, sl, previous, forecast, actual, outcome, improvement, news_event_id, trade_type)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
     """, (
         event["event_date"], event["your_name"], body.news2 or "", body.news3 or "",
         body.entry or "", body.ratio, body.sl, event.get("previous") or "",
         event.get("forecast") or "", event.get("actual") or "",
-        body.outcome, body.improvement or "", event_id,
+        body.outcome, body.improvement or "", event_id, trade_type,
     ))
     trade_id = c.fetchone()["id"]
     conn.commit()
@@ -923,6 +958,12 @@ async def serve_frontend():
 @app.on_event("startup")
 def on_startup():
     if os.getenv("VERCEL"):
+        try:
+            conn = get_db()
+            ensure_trade_schema(conn)
+            conn.close()
+        except Exception as e:
+            print(f"Schema check failed: {e}")
         return
     try:
         init_db()
