@@ -23,6 +23,8 @@ from scraper import (
     get_last_sync, get_journal_rows, save_journal_note,
     get_news_event, scrape_upcoming, get_upcoming_from_db, get_brief, NEWS_MAP,
 )
+from agent.memory import create_session, ensure_agent_schema, get_history, new_session_id
+from agent.graph import chat as agent_chat, stream_chat as agent_stream_chat
 
 # ── APP SETUP ─────────────────────────────────────────────
 app = FastAPI(title="GBP/USD Trading Intelligence")
@@ -946,6 +948,77 @@ def get_trade_brief(event_name: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ── ROUTES: AI AGENT ──────────────────────────────────────
+class AgentChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+    live_context: Optional[dict] = None
+
+
+class AgentSessionRequest(BaseModel):
+    session_id: Optional[str] = None
+    title: Optional[str] = "New conversation"
+
+
+@app.post("/api/agent/session")
+def agent_create_session(body: AgentSessionRequest):
+    sid = create_session(body.session_id or new_session_id(), body.title or "New conversation")
+    return {"session_id": sid}
+
+
+@app.get("/api/agent/session/{session_id}/history")
+def agent_get_history(session_id: str):
+    try:
+        return {"session_id": session_id, "messages": get_history(session_id, limit=40)}
+    except Exception as e:
+        return {"session_id": session_id, "messages": [], "error": str(e)}
+
+
+@app.get("/api/agent/status")
+def agent_status():
+    configured = bool(os.getenv("OPENAI_API_KEY"))
+    return {
+        "configured": configured,
+        "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+    }
+
+
+@app.post("/api/agent/chat")
+def agent_chat_endpoint(body: AgentChatRequest):
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="Message is required")
+    sid = body.session_id or new_session_id()
+    create_session(sid)
+    try:
+        return agent_chat(sid, body.message.strip(), body.live_context or {})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/agent/chat/stream")
+async def agent_chat_stream(body: AgentChatRequest):
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="Message is required")
+    sid = body.session_id or new_session_id()
+    create_session(sid)
+
+    async def event_generator():
+        try:
+            async for chunk in agent_stream_chat(sid, body.message.strip(), body.live_context or {}):
+                if chunk.startswith("{") and '"done"' in chunk:
+                    yield f"data: {chunk}\n\n"
+                else:
+                    yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
 # ── SERVE FRONTEND (local dev; on Vercel use public/index.html) ──
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
@@ -961,12 +1034,16 @@ def on_startup():
         try:
             conn = get_db()
             ensure_trade_schema(conn)
+            ensure_agent_schema(conn)
             conn.close()
         except Exception as e:
             print(f"Schema check failed: {e}")
         return
     try:
         init_db()
+        conn = get_db()
+        ensure_agent_schema(conn)
+        conn.close()
     except Exception as e:
         print(f"Database startup check failed: {e}")
 

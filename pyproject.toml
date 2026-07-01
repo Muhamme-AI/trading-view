@@ -11,6 +11,12 @@ dependencies = [
     "psycopg2-binary==2.9.10",
     "psycopg[binary]>=3.3.0",
     "python-dotenv==1.0.1",
+    "curl_cffi>=0.7.0",
+    "langchain>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-community>=0.3.0",
+    "langgraph>=0.2.0",
+    "faiss-cpu>=1.8.0",
 ]
 
 [tool.vercel]

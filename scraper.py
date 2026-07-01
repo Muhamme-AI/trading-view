@@ -5,12 +5,57 @@ Pulls news events, matches to your watchlist, fetches GBP/USD reactions from OAN
 
 import httpx
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from bs4 import BeautifulSoup
 import re
 import json
 
 from db import get_db, check_connection
+
+try:
+    from curl_cffi.requests import AsyncSession as _CurlAsyncSession
+except ImportError:
+    _CurlAsyncSession = None
+
+
+class _FfResponse:
+    """Wrap curl_cffi response to match httpx Response interface."""
+
+    def __init__(self, response):
+        self.status_code = response.status_code
+        self.text = response.text
+
+    @property
+    def is_success(self):
+        return 200 <= self.status_code < 300
+
+
+class FfHttpClient:
+    """HTTP client for Forex Factory (bypasses Cloudflare via curl_cffi)."""
+
+    def __init__(self, session):
+        self._session = session
+
+    async def get(self, url, headers=None, timeout=30, follow_redirects=True):
+        r = await self._session.get(
+            url,
+            headers=headers or {},
+            impersonate="chrome131",
+            timeout=timeout,
+        )
+        return _FfResponse(r)
+
+
+@asynccontextmanager
+async def ff_client():
+    """Yield an HTTP client suitable for scraping Forex Factory."""
+    if _CurlAsyncSession is not None:
+        async with _CurlAsyncSession() as session:
+            yield FfHttpClient(session)
+    else:
+        async with httpx.AsyncClient() as client:
+            yield client
 
 # ── NEWS EVENT MAP ────────────────────────────────────────
 # Maps your internal name → (forex_factory_keyword, country, impact_colours)
@@ -107,7 +152,7 @@ def classify_beat_miss(actual: str, forecast: str) -> str:
     except:
         return "unknown"
 
-async def scrape_month(year: int, month: int, client: httpx.AsyncClient) -> list:
+async def scrape_month(year: int, month: int, client) -> list:
     """Scrape one month of FF calendar. Returns list of matched event dicts."""
     url = build_ff_url(year, month)
     events = []
@@ -398,7 +443,7 @@ def get_events_without_reactions() -> list:
         LEFT JOIN price_reactions pr ON pr.news_event_id = ne.id
         WHERE pr.id IS NULL
         AND ne.actual != '' AND ne.actual IS NOT NULL
-        AND ne.event_date <= CURRENT_DATE
+        AND ne.event_date <= CURRENT_DATE::text
         ORDER BY ne.event_date DESC
     """).fetchall()
     conn.close()
@@ -442,23 +487,24 @@ async def run_sync(progress_callback=None, start_date: datetime | None = None) -
         if progress_callback:
             await progress_callback({"stage": "scraping", "message": f"Scraping {len(months)} months from Forex Factory...", "progress": 0})
 
-        # Scrape all months
-        async with httpx.AsyncClient() as client:
+        # Scrape all months (curl_cffi bypasses FF Cloudflare)
+        async with ff_client() as ff:
             all_events = []
             for i, (year, month) in enumerate(months):
                 if progress_callback:
                     pct = int((i / len(months)) * 50)
                     await progress_callback({"stage": "scraping", "message": f"Scraping {datetime(year, month, 1).strftime('%b %Y')}...", "progress": pct})
 
-                month_events = await scrape_month(year, month, client)
+                month_events = await scrape_month(year, month, ff)
                 all_events.extend(month_events)
                 print(f"  {datetime(year, month, 1).strftime('%b %Y')}: {len(month_events)} events found")
                 await asyncio.sleep(2)  # Be polite to FF
 
-            total_events, new_events = save_events(all_events)
-            print(f"\n  Total events: {total_events}, New: {new_events}")
+        total_events, new_events = save_events(all_events)
+        print(f"\n  Total events: {total_events}, New: {new_events}")
 
-            # Fetch OANDA price reactions for events without them
+        # Fetch OANDA price reactions for events without them
+        async with httpx.AsyncClient() as client:
             if progress_callback:
                 await progress_callback({"stage": "reactions", "message": "Fetching price reactions from OANDA...", "progress": 50})
 
@@ -657,7 +703,7 @@ async def scrape_upcoming(days: int = 7) -> list:
             d = d.replace(year=d.year + 1, month=1, day=1)
         else:
             d = d.replace(month=d.month + 1, day=1)
-    async with httpx.AsyncClient() as client:
+    async with ff_client() as client:
         all_events = []
         for year, month in sorted(months):
             all_events.extend(await scrape_month(year, month, client))
