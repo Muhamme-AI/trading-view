@@ -5,6 +5,7 @@ Pulls news events, matches to your watchlist, fetches GBP/USD reactions from OAN
 
 import httpx
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from bs4 import BeautifulSoup
