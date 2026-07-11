@@ -923,13 +923,14 @@ async def get_upcoming():
             "source": _upcoming_cache.get("source", "live"),
         }
     try:
-        events = await scrape_upcoming(7)
-        source = "live"
+        events, source = await scrape_upcoming(7)
         if not events:
             events = get_upcoming_from_db(7)
             source = "database"
+        # Cache empty results briefly so we keep retrying soon
+        ttl_hours = 1 if events else (1 / 12)  # 5 min if empty
         _upcoming_cache["data"] = events
-        _upcoming_cache["expires"] = now + timedelta(hours=1)
+        _upcoming_cache["expires"] = now + timedelta(hours=ttl_hours)
         _upcoming_cache["source"] = source
         return {"events": events, "cached": False, "source": source}
     except Exception as e:

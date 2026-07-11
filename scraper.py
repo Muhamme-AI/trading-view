@@ -120,17 +120,100 @@ def parse_impact(td) -> str:
         return "yellow"
     return ""
 
+# Extra title fragments used by Investing.com / other calendars
+TITLE_ALIASES = {
+    "Non Farm Payroll US": ["nonfarm payrolls", "non-farm payrolls", "nfp"],
+    "Unemployment US": ["unemployment rate"],
+    "Core Inflation MoM US": ["core cpi"],
+    "Inflation Rate YoY US": ["cpi y/y", "cpi (yoy)", "consumer price index"],
+    "Inflation Rate YoY UK": ["cpi y/y", "cpi (yoy)"],
+    "PPI MoM US": ["ppi m/m", "ppi (mom)", "producer price index"],
+    "PPI US": ["ppi"],
+    "GDP UK": ["gdp"],
+    "GDP US": ["gdp"],
+    "Retail UK": ["retail sales"],
+    "Retail US": ["retail sales"],
+    "Fed Chair Powell Speech US": ["fed chair powell", "powell speaks"],
+    "BOE Interest Rate US": ["boe interest rate", "official bank rate"],
+    "JOLTs Job Openings US": ["jolts", "job openings"],
+    "Unemployment UK": ["claimant count"],
+    "Michigan Consumer Sentiment US": ["michigan"],
+    "Existing Home Sales US": ["existing home sales"],
+    "Core PCE MoM US": ["core pce"],
+    "Durable Goods US": ["durable goods"],
+    "Personal Spending US": ["personal spending"],
+    "FOMC US": ["fomc", "fed interest rate decision", "federal funds rate"],
+}
+
+
+def _normalize_event_title(title: str) -> str:
+    t = (title or "").lower()
+    t = t.replace("(yoy)", "y/y").replace("(mom)", "m/m").replace("(qoq)", "q/q")
+    t = re.sub(r"\s*\((jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\)\s*", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
 def match_event(ff_title: str, ff_currency: str) -> dict | None:
-    """Match a FF event row to one of our tracked events."""
-    ff_title_lower = ff_title.lower()
+    """Match a calendar event title to one of our tracked events."""
+    title_norm = _normalize_event_title(ff_title)
+    currency = (ff_currency or "").upper()
+    is_speech = any(w in title_norm for w in ("speaks", "speech"))
+    candidates = []
     for (your_name, keyword, country, min_impact) in NEWS_MAP:
-        # Currency must match
-        currency_map = {"USD": "USD", "GBP": "GBP"}
-        if ff_currency.upper() != country:
+        if currency != country:
             continue
-        if keyword.lower() in ff_title_lower:
-            return {"your_name": your_name, "country": country, "min_impact": min_impact}
-    return None
+        # Speeches only map to explicit speech watchlist items
+        if is_speech and "speech" not in your_name.lower() and "powell" not in your_name.lower():
+            continue
+        if "tracker" in title_norm and your_name.startswith("GDP"):
+            continue
+        if "gdpnow" in title_norm.replace(" ", "") or "gdp now" in title_norm:
+            continue
+        if your_name == "Retail UK" and "brc" in title_norm:
+            continue
+        if your_name in ("PPI US", "PPI MoM US") and title_norm.startswith("core "):
+            continue
+        if your_name == "Retail US" and ("core retail" in title_norm or "retail control" in title_norm or "inventories" in title_norm):
+            continue
+        needles = [keyword.lower()] + TITLE_ALIASES.get(your_name, [])
+        # Prefer precise rate-decision wording for FOMC / BOE
+        if your_name == "FOMC US":
+            needles = ["federal funds rate", "fed interest rate decision", "fomc meeting minutes", "fomc statement", "fomc"]
+            if is_speech:
+                continue
+            if not any(n in title_norm for n in ("fomc", "federal funds", "interest rate decision")):
+                continue
+            # Skip member-only FOMC mentions without decision/minutes/statement
+            if "member" in title_norm and not any(n in title_norm for n in ("minutes", "statement", "interest rate", "federal funds")):
+                continue
+        if your_name == "BOE Interest Rate US":
+            needles = ["official bank rate", "boe interest rate decision", "boe rate"]
+            if is_speech or "member" in title_norm:
+                continue
+            if not any(n in title_norm for n in ("official bank rate", "interest rate decision", "boe rate")):
+                if "boe" in title_norm and "rate" in title_norm:
+                    pass
+                else:
+                    continue
+        if your_name == "Michigan Consumer Sentiment US" and "sentiment" not in title_norm:
+            continue
+        matched_needle = None
+        for n in needles:
+            nn = _normalize_event_title(n)
+            if nn and nn in title_norm:
+                matched_needle = nn
+                break
+        if matched_needle:
+            candidates.append((len(matched_needle), {
+                "your_name": your_name,
+                "country": country,
+                "min_impact": min_impact,
+            }))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
 
 def classify_beat_miss(actual: str, forecast: str) -> str:
     """Return beat/miss/inline/unknown."""
@@ -691,8 +774,170 @@ def get_upcoming_from_db(days: int = 7) -> list:
     conn.close()
     return [dict(r) for r in rows]
 
-async def scrape_upcoming(days: int = 7) -> list:
-    """Scrape FF for events in the next N days."""
+def _filter_upcoming(events: list, days: int = 7) -> list:
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days)
+    upcoming = []
+    for ev in events:
+        try:
+            ed = datetime.strptime(ev["event_date"], "%Y-%m-%d").date()
+            if today <= ed <= end_date:
+                upcoming.append(ev)
+        except Exception:
+            continue
+    upcoming.sort(key=lambda e: (e["event_date"], e.get("event_time") or ""))
+    return upcoming
+
+
+def _parse_investing_impact(sentiment_td) -> str:
+    if not sentiment_td:
+        return ""
+    full = len(sentiment_td.select(".grayFullBullishIcon"))
+    if full >= 3:
+        return "red"
+    if full == 2:
+        return "orange"
+    if full == 1:
+        return "yellow"
+    return ""
+
+
+async def scrape_upcoming_investing(days: int = 7) -> list:
+    """Fallback calendar via Investing.com (this week + next week)."""
+    url = "https://www.investing.com/economic-calendar/Service/getCalendarFilteredData"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://www.investing.com/economic-calendar/",
+        "Origin": "https://www.investing.com",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    }
+    # country 5 = US, 4 = UK; importance 2/3 = medium/high
+    base = {
+        "country[]": ["5", "4"],
+        "importance[]": ["2", "3"],
+        "timeZone": "8",
+        "timeFilter": "timeRemain",
+        "limit_from": "0",
+    }
+    events = []
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        for tab in ("thisWeek", "nextWeek"):
+            try:
+                r = await client.post(url, headers=headers, data={**base, "currentTab": tab})
+                if not r.is_success:
+                    print(f"  Investing.com returned {r.status_code} for {tab}")
+                    continue
+                payload = r.json()
+                html = payload.get("data") or ""
+                if not html:
+                    continue
+                soup = BeautifulSoup(html, "html.parser")
+                for row in soup.select("tr.js-event-item"):
+                    raw_dt = row.get("data-event-datetime") or ""
+                    try:
+                        parsed = datetime.strptime(raw_dt, "%Y/%m/%d %H:%M:%S")
+                    except Exception:
+                        continue
+                    cur_cell = row.select_one("td.flagCur")
+                    currency = (cur_cell.get_text(strip=True) if cur_cell else "").upper()
+                    if currency not in ("USD", "GBP"):
+                        continue
+                    impact = _parse_investing_impact(row.select_one("td.sentiment"))
+                    if impact not in ("red", "orange"):
+                        continue
+                    event_cell = row.select_one("td.event")
+                    title = event_cell.get_text(strip=True) if event_cell else ""
+                    match = match_event(title, currency)
+                    if not match:
+                        continue
+                    actual = (row.select_one("td.act") or row.select_one("[class*=actual]"))
+                    forecast = row.select_one("td.fore")
+                    previous = row.select_one("td.prev")
+                    actual_txt = actual.get_text(strip=True) if actual else ""
+                    forecast_txt = forecast.get_text(strip=True) if forecast else ""
+                    previous_txt = previous.get_text(strip=True) if previous else ""
+                    events.append({
+                        "your_name": match["your_name"],
+                        "ff_title": title,
+                        "country": match["country"],
+                        "event_date": parsed.strftime("%Y-%m-%d"),
+                        "event_time": parsed.strftime("%H:%M"),
+                        "previous": previous_txt,
+                        "forecast": forecast_txt,
+                        "actual": actual_txt,
+                        "impact": impact,
+                        "beat_miss": classify_beat_miss(actual_txt, forecast_txt),
+                    })
+            except Exception as e:
+                print(f"  Investing.com scrape failed for {tab}: {e}")
+    # Deduplicate by date+name+time
+    seen = set()
+    deduped = []
+    for ev in events:
+        key = (ev["event_date"], ev["your_name"], ev.get("event_time") or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(ev)
+    return _filter_upcoming(deduped, days)
+
+
+async def scrape_upcoming_faireconomy(days: int = 7) -> list:
+    """Lightweight FF mirror JSON (this calendar week only)."""
+    url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+    impact_map = {"High": "red", "Medium": "orange", "Low": "yellow"}
+    events = []
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+            if not r.is_success:
+                print(f"  Faireconomy returned {r.status_code}")
+                return []
+            for row in r.json():
+                currency = (row.get("country") or "").upper()
+                if currency not in ("USD", "GBP"):
+                    continue
+                impact = impact_map.get(row.get("impact") or "", "")
+                if impact not in ("red", "orange"):
+                    continue
+                title = row.get("title") or ""
+                match = match_event(title, currency)
+                if not match:
+                    continue
+                raw_date = row.get("date") or ""
+                try:
+                    # e.g. 2026-07-06T10:00:00-04:00
+                    parsed = datetime.fromisoformat(raw_date)
+                except Exception:
+                    continue
+                actual = row.get("actual") or ""
+                forecast = row.get("forecast") or ""
+                previous = row.get("previous") or ""
+                events.append({
+                    "your_name": match["your_name"],
+                    "ff_title": title,
+                    "country": match["country"],
+                    "event_date": parsed.strftime("%Y-%m-%d"),
+                    "event_time": parsed.strftime("%H:%M"),
+                    "previous": previous,
+                    "forecast": forecast,
+                    "actual": actual,
+                    "impact": impact,
+                    "beat_miss": classify_beat_miss(actual, forecast),
+                })
+    except Exception as e:
+        print(f"  Faireconomy scrape failed: {e}")
+        return []
+    return _filter_upcoming(events, days)
+
+
+async def scrape_upcoming(days: int = 7) -> tuple[list, str]:
+    """Scrape upcoming events: Forex Factory first, then Investing.com / Faireconomy fallbacks.
+
+    Returns (events, source) where source is live|investing|faireconomy|empty.
+    """
     today = datetime.now().date()
     end_date = today + timedelta(days=days)
     months = set()
@@ -708,16 +953,20 @@ async def scrape_upcoming(days: int = 7) -> list:
         for year, month in sorted(months):
             all_events.extend(await scrape_month(year, month, client))
             await asyncio.sleep(1)
-    upcoming = []
-    for ev in all_events:
-        try:
-            ed = datetime.strptime(ev["event_date"], "%Y-%m-%d").date()
-            if today <= ed <= end_date:
-                upcoming.append(ev)
-        except Exception:
-            continue
-    upcoming.sort(key=lambda e: (e["event_date"], e.get("event_time") or ""))
-    return upcoming
+    upcoming = _filter_upcoming(all_events, days)
+    if upcoming:
+        return upcoming, "live"
+
+    print("  FF upcoming empty — trying Investing.com fallback")
+    upcoming = await scrape_upcoming_investing(days)
+    if upcoming:
+        return upcoming, "investing"
+
+    print("  Investing.com empty — trying Faireconomy JSON fallback")
+    upcoming = await scrape_upcoming_faireconomy(days)
+    if upcoming:
+        return upcoming, "faireconomy"
+    return [], "empty"
 
 def _consistency_stats(rows: list) -> dict:
     beat = miss = 0

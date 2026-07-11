@@ -824,7 +824,10 @@ async function renderThisWeek() {
     }
   }
   const body = sections.length ? `<div class="card">${sections.join('')}</div>` : '<div class="card"><div class="empty-state"><div class="empty-state-icon">📅</div>No tracked events in the next 7 days.</div></div>';
-  const sourceNote = data.source === 'database' ? ' · from synced data' : '';
+  const sourceNote = data.source === 'database' ? ' · from synced data'
+    : data.source === 'investing' ? ' · via Investing.com'
+    : data.source === 'faireconomy' ? ' · via calendar feed'
+    : '';
   m.innerHTML = `<div class="page-header"><div class="page-title">This Week</div><div class="page-sub">Upcoming USD &amp; GBP news · next 7 days${data.cached?' · cached':''}${sourceNote}</div></div>${body}
     <div class="page-actions"><button class="btn btn-secondary" onclick="renderThisWeek()">↻ Refresh</button></div>`;
 }
