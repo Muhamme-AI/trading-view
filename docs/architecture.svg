@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 620" width="1100" height="620" role="img" aria-labelledby="title desc">
+  <title id="title">News Trading Intelligence — how it works</title>
+  <desc id="desc">Flow from news ingest through analytics and a guarded RAG advisor to trade guidance.</desc>
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#5ee9b5"/>
+    </marker>
+  </defs>
+
+  <rect width="1100" height="620" fill="#0a0a0b" rx="16"/>
+  <rect x="1" y="1" width="1098" height="618" fill="none" stroke="#27272a" stroke-width="2" rx="16"/>
+
+  <text x="40" y="48" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700">News Trading Intelligence</text>
+  <text x="40" y="72" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">How the system works — scrape news, measure reactions, advise with grounded RAG</text>
+
+  <!-- Step 1 -->
+  <text x="40" y="120" fill="#5ee9b5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" letter-spacing="2">01  INGEST</text>
+  <rect x="40" y="136" width="240" height="120" rx="12" fill="#111113" stroke="#3f3f46" stroke-width="1.5"/>
+  <text x="60" y="168" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">Forex Factory</text>
+  <text x="60" y="190" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">calendar scraper</text>
+  <text x="60" y="220" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">OANDA prices</text>
+  <text x="60" y="242" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">GBP/USD pip reactions</text>
+
+  <path d="M280 196 H320" stroke="#5ee9b5" stroke-width="2" fill="none" marker-end="url(#a)" opacity="0.8"/>
+
+  <!-- Step 2 -->
+  <text x="330" y="120" fill="#5ee9b5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" letter-spacing="2">02  STORE + ANALYSE</text>
+  <rect x="330" y="136" width="260" height="120" rx="12" fill="#111113" stroke="#3f3f46" stroke-width="1.5"/>
+  <text x="350" y="168" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">Postgres / Supabase</text>
+  <text x="350" y="190" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">events | reactions | journal</text>
+  <text x="350" y="220" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">Historical edge</text>
+  <text x="350" y="242" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">beat/miss | avg pips | consistency</text>
+
+  <path d="M590 196 H630" stroke="#5ee9b5" stroke-width="2" fill="none" marker-end="url(#a)" opacity="0.8"/>
+
+  <!-- Step 3 -->
+  <text x="640" y="120" fill="#5ee9b5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" letter-spacing="2">03  PLATFORM</text>
+  <rect x="640" y="136" width="240" height="120" rx="12" fill="#002d23" stroke="#5ee9b5" stroke-width="1.5" stroke-opacity="0.55"/>
+  <text x="660" y="168" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">FastAPI backend</text>
+  <text x="660" y="190" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">briefs | analysis APIs</text>
+  <text x="660" y="220" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">Trading UI</text>
+  <text x="660" y="242" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">calendar + live assistant</text>
+
+  <!-- Step 4 AI -->
+  <text x="40" y="320" fill="#5ee9b5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" letter-spacing="2">04  AI ADVISOR (LangGraph)</text>
+  <rect x="40" y="336" width="700" height="140" rx="12" fill="#002d23" stroke="#5ee9b5" stroke-width="1.5" stroke-opacity="0.55"/>
+
+  <rect x="60" y="360" width="140" height="90" rx="10" fill="#0a0a0b" stroke="#3f3f46" stroke-width="1.5"/>
+  <text x="78" y="398" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="600">RAG (FAISS)</text>
+  <text x="78" y="420" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">retrieve edge</text>
+
+  <path d="M200 405 H230" stroke="#5ee9b5" stroke-width="2" fill="none" marker-end="url(#a)" opacity="0.8"/>
+
+  <rect x="230" y="360" width="150" height="90" rx="10" fill="#0a0a0b" stroke="#3f3f46" stroke-width="1.5"/>
+  <text x="248" y="398" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="600">DB tools</text>
+  <text x="248" y="420" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">history | briefs</text>
+
+  <path d="M380 405 H410" stroke="#5ee9b5" stroke-width="2" fill="none" marker-end="url(#a)" opacity="0.8"/>
+
+  <rect x="410" y="360" width="150" height="90" rx="10" fill="#0a0a0b" stroke="#3f3f46" stroke-width="1.5"/>
+  <text x="428" y="398" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="600">Memory</text>
+  <text x="428" y="420" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">session chat</text>
+
+  <path d="M560 405 H590" stroke="#5ee9b5" stroke-width="2" fill="none" marker-end="url(#a)" opacity="0.8"/>
+
+  <rect x="590" y="360" width="130" height="90" rx="10" fill="#0a0a0b" stroke="#3f3f46" stroke-width="1.5"/>
+  <text x="608" y="398" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="600">Guardrails</text>
+  <text x="608" y="420" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">confidence</text>
+
+  <path d="M740 405 H780" stroke="#5ee9b5" stroke-width="2" fill="none" marker-end="url(#a)" opacity="0.8"/>
+
+  <!-- Output -->
+  <text x="790" y="320" fill="#5ee9b5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" letter-spacing="2">05  OUTPUT</text>
+  <rect x="790" y="336" width="270" height="140" rx="12" fill="#111113" stroke="#5ee9b5" stroke-width="1.5" stroke-opacity="0.55"/>
+  <text x="810" y="380" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">Trade guidance</text>
+  <text x="810" y="406" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">Context + historical edge</text>
+  <text x="810" y="426" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">Bias only when justified</text>
+  <text x="810" y="446" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">Plan + confidence score</text>
+
+  <!-- Connect platform to AI -->
+  <path d="M760 256 V300 H390 V336" stroke="#5ee9b5" stroke-width="1.6" fill="none" opacity="0.55" marker-end="url(#a)"/>
+
+  <text x="40" y="540" fill="#71717a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">Stack: FastAPI  |  LangGraph  |  LangChain  |  FAISS  |  Postgres  |  OpenAI</text>
+  <text x="40" y="566" fill="#71717a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">Rule: no invented stats — weak edge triggers sit-out / wait for confirmation</text>
+</svg>
