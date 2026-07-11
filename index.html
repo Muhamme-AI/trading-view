@@ -2080,7 +2080,7 @@ async function initAgentPanel() {
       const st = await GET('/agent/status');
       agentConfigured = st.configured;
       if (!st.configured) {
-        renderAgentWelcome('Add OPENAI_API_KEY to your .env file to enable the AI advisor.');
+        renderAgentWelcome('Add GROQ_API_KEY (recommended) or OPENAI_API_KEY to your .env / Vercel env vars to enable the AI advisor.');
         return;
       }
     } catch (e) {

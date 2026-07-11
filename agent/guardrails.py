@@ -6,8 +6,9 @@ import json
 import re
 from typing import Any
 
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+
+from agent.llm import get_chat_llm, is_agent_configured
 
 DIRECTIONAL_PATTERNS = re.compile(
     r"\b(buy|sell|long|short|enter now|go long|go short|definitely|guaranteed|certainly will)\b",
@@ -95,15 +96,11 @@ def apply_guardrails(
 
 
 def llm_guardrail_check(response: str, context_snippet: str) -> GuardrailVerdict | None:
-    """Optional LLM-based guardrail when OPENAI_API_KEY is set."""
-    api_key = __import__("os").getenv("OPENAI_API_KEY")
-    if not api_key:
+    """Optional LLM-based guardrail when an API key is set."""
+    if not is_agent_configured():
         return None
     try:
-        llm = ChatOpenAI(
-            model=__import__("os").getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            temperature=0,
-        ).with_structured_output(GuardrailVerdict)
+        llm = get_chat_llm(temperature=0).with_structured_output(GuardrailVerdict)
         prompt = f"""Review this trading assistant reply for a GBP/USD fundamental news trader.
 Context available:
 {context_snippet[:2000]}

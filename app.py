@@ -25,6 +25,7 @@ from scraper import (
 )
 from agent.memory import create_session, ensure_agent_schema, get_history, new_session_id
 from agent.graph import chat as agent_chat, stream_chat as agent_stream_chat
+from agent.llm import get_chat_model_name, get_provider, is_agent_configured
 
 # ── APP SETUP ─────────────────────────────────────────────
 app = FastAPI(title="GBP/USD Trading Intelligence")
@@ -977,11 +978,13 @@ def agent_get_history(session_id: str):
 
 @app.get("/api/agent/status")
 def agent_status():
-    configured = bool(os.getenv("OPENAI_API_KEY"))
+    configured = is_agent_configured()
+    provider = get_provider()
     return {
         "configured": configured,
-        "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-        "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+        "provider": provider,
+        "model": get_chat_model_name(),
+        "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small") if os.getenv("OPENAI_API_KEY") else "keyword",
     }
 
 

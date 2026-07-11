@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
 from typing import Any
@@ -11,6 +12,7 @@ from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 
+from agent.llm import _openai_key
 from db import get_db
 from scraper import get_analysis_summary, get_upcoming_from_db
 
@@ -18,6 +20,8 @@ _INDEX_LOCK = threading.Lock()
 _INDEX: FAISS | None = None
 _INDEX_BUILT_AT: float = 0.0
 _INDEX_TTL_SEC = 600  # 10 minutes
+_DOCS_CACHE: list[Document] | None = None
+_DOCS_BUILT_AT: float = 0.0
 
 
 def _impact_label(impact: str | None) -> str:
@@ -113,9 +117,36 @@ def _build_documents() -> list[Document]:
     return docs
 
 
+def _get_documents(force_refresh: bool = False) -> list[Document]:
+    global _DOCS_CACHE, _DOCS_BUILT_AT
+    now = time.time()
+    with _INDEX_LOCK:
+        if _DOCS_CACHE is not None and not force_refresh and (now - _DOCS_BUILT_AT) < _INDEX_TTL_SEC:
+            return _DOCS_CACHE
+        _DOCS_CACHE = _build_documents()
+        _DOCS_BUILT_AT = now
+        return _DOCS_CACHE
+
+
+def _keyword_retrieve(query: str, docs: list[Document], k: int = 8) -> list[Document]:
+    """Lightweight retrieval when no embedding API is available (e.g. Groq-only)."""
+    terms = [t for t in re.findall(r"\w+", query.lower()) if len(t) > 2]
+    if not terms:
+        return docs[:k]
+    scored: list[tuple[int, Document]] = []
+    for doc in docs:
+        text = doc.page_content.lower()
+        meta = " ".join(str(v) for v in (doc.metadata or {}).values()).lower()
+        score = sum(2 if t in meta else 1 for t in terms if t in text or t in meta)
+        if score:
+            scored.append((score, doc))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [doc for _, doc in scored[:k]] if scored else docs[:k]
+
+
 def get_vectorstore(force_refresh: bool = False) -> FAISS | None:
     global _INDEX, _INDEX_BUILT_AT
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = _openai_key()
     if not api_key:
         return None
 
@@ -124,7 +155,7 @@ def get_vectorstore(force_refresh: bool = False) -> FAISS | None:
         if _INDEX is not None and not force_refresh and (now - _INDEX_BUILT_AT) < _INDEX_TTL_SEC:
             return _INDEX
 
-        docs = _build_documents()
+        docs = _get_documents(force_refresh)
         if not docs:
             return None
 
@@ -135,10 +166,6 @@ def get_vectorstore(force_refresh: bool = False) -> FAISS | None:
 
 
 def retrieve(query: str, k: int = 8, live_context: dict | None = None) -> list[Document]:
-    store = get_vectorstore()
-    if store is None:
-        return []
-
     enriched = query
     if live_context:
         page = live_context.get("page")
@@ -148,7 +175,11 @@ def retrieve(query: str, k: int = 8, live_context: dict | None = None) -> list[D
         if event:
             enriched += f" User is viewing event: {event}."
 
-    docs = store.similarity_search(enriched, k=k)
+    store = get_vectorstore()
+    if store is not None:
+        docs = store.similarity_search(enriched, k=k)
+    else:
+        docs = _keyword_retrieve(enriched, _get_documents(), k=k)
 
     # Boost docs matching live context event
     if live_context:

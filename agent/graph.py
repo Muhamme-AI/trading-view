@@ -7,13 +7,13 @@ import os
 from typing import Annotated, Any, AsyncIterator, Literal, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
-from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from agent.guardrails import apply_guardrails, assess_confidence_from_context, llm_guardrail_check
+from agent.llm import agent_config_message, get_chat_llm, is_agent_configured
 from agent.memory import get_history, save_message, touch_session
 from agent.rag import format_retrieved_docs, retrieve
 from agent.tools import AGENT_TOOLS
@@ -56,11 +56,7 @@ class AgentState(TypedDict):
 
 
 def _get_llm():
-    return ChatOpenAI(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-        temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.2")),
-        streaming=True,
-    )
+    return get_chat_llm(streaming=True)
 
 
 def _build_graph():
@@ -172,11 +168,9 @@ def chat(
     message: str,
     live_context: dict | None = None,
 ) -> dict[str, Any]:
-    if not os.getenv("OPENAI_API_KEY"):
+    if not is_agent_configured():
         return {
-            "reply": (
-                "AI advisor is not configured. Add `OPENAI_API_KEY` to your `.env` file and restart the server."
-            ),
+            "reply": agent_config_message(),
             "confidence": "low",
             "session_id": session_id,
             "guardrail_applied": False,
