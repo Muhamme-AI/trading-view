@@ -934,10 +934,27 @@ async def scrape_upcoming_faireconomy(days: int = 7) -> list:
 
 
 async def scrape_upcoming(days: int = 7) -> tuple[list, str]:
-    """Scrape upcoming events: Forex Factory first, then Investing.com / Faireconomy fallbacks.
+    """Scrape upcoming events. Prefer Investing.com on Vercel (FF is often Cloudflare-blocked).
 
     Returns (events, source) where source is live|investing|faireconomy|empty.
     """
+    on_vercel = bool(os.getenv("VERCEL"))
+
+    # Investing.com is the reliable upcoming source when FF HTML is blocked
+    print("  Trying Investing.com upcoming calendar")
+    upcoming = await scrape_upcoming_investing(days)
+    if upcoming:
+        return upcoming, "investing"
+
+    print("  Investing.com empty — trying Faireconomy JSON fallback")
+    upcoming = await scrape_upcoming_faireconomy(days)
+    if upcoming:
+        return upcoming, "faireconomy"
+
+    if on_vercel:
+        # Skip slow FF HTML scrape on serverless — usually 403 and burns the time budget
+        return [], "empty"
+
     today = datetime.now().date()
     end_date = today + timedelta(days=days)
     months = set()
@@ -956,16 +973,6 @@ async def scrape_upcoming(days: int = 7) -> tuple[list, str]:
     upcoming = _filter_upcoming(all_events, days)
     if upcoming:
         return upcoming, "live"
-
-    print("  FF upcoming empty — trying Investing.com fallback")
-    upcoming = await scrape_upcoming_investing(days)
-    if upcoming:
-        return upcoming, "investing"
-
-    print("  Investing.com empty — trying Faireconomy JSON fallback")
-    upcoming = await scrape_upcoming_faireconomy(days)
-    if upcoming:
-        return upcoming, "faireconomy"
     return [], "empty"
 
 def _consistency_stats(rows: list) -> dict:
